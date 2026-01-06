@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "verify": "bun run tsc && bun run lint && bun run test",
     "prepare": "husky",
-    "build": "bun build src/index.ts --compile --outfile bun-checker"
+    "build": "bun build src/cli.ts --compile --outfile bun-checker"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.0",
