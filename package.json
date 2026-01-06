@@ -1,7 +1,11 @@
 {
-  "name": "firebet",
-  "module": "index.ts",
+  "name": "bun-checker",
+  "version": "0.1.0",
+  "module": "src/index.ts",
   "type": "module",
+  "bin": {
+    "bun-checker": "./src/cli.ts"
+  },
   "scripts": {
     "tsc": "tsc --noEmit",
     "test": "bun test",
@@ -9,7 +13,8 @@
     "lint": "eslint . --fix",
     "format": "prettier --write .",
     "verify": "bun run tsc && bun run lint && bun run test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build": "bun build src/index.ts --compile --outfile bun-checker"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.0",
@@ -24,9 +29,15 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
+    "typescript": "^5.0.0",
     "typescript-eslint": "^8.51.0"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "cac": "^6.7.14",
+    "oxc-parser": "^0.107.0",
+    "ts-morph": "^27.0.2"
   }
 }
