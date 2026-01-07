@@ -1,0 +1,11 @@
+{
+  "jsPlugins": ["./src/plugin.ts"],
+  "rules": {
+    "bun-checker-plugin/file-naming": "error",
+    "bun-checker-plugin/no-inline-object": "error",
+    "bun-checker-plugin/max-params": "error",
+    "bun-checker-plugin/type-interface-separation": "error",
+    "bun-checker-plugin/enum-pascal-case": "error",
+    "bun-checker-plugin/repeated-literals": "error"
+  }
+}

@@ -1,43 +1,20 @@
 {
-  "name": "bun-checker",
+  "name": "bun-checker-plugin",
   "version": "0.1.0",
-  "module": "src/index.ts",
   "type": "module",
-  "bin": {
-    "bun-checker": "./src/cli.ts"
-  },
   "scripts": {
-    "tsc": "tsc --noEmit",
     "test": "bun test",
-    "test:coverage": "bun test --coverage",
-    "lint": "eslint . --fix",
-    "format": "prettier --write .",
-    "verify": "bun run tsc && bun run lint && bun run test",
-    "prepare": "husky",
-    "build": "bun build src/cli.ts --compile --outfile bun-checker"
+    "lint": "oxlint -c .oxlintrc.json src"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.3.0",
-    "@commitlint/config-conventional": "^20.3.0",
-    "@eslint/json": "^0.14.0",
-    "@eslint/markdown": "^7.5.1",
     "@types/bun": "latest",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-unused-imports": "^4.3.0",
-    "globals": "^17.0.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "prettier": "^3.7.4",
-    "typescript": "^5.0.0",
-    "typescript-eslint": "^8.51.0"
-  },
-  "peerDependencies": {
+    "oxlint": "^0.15.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "cac": "^6.7.14",
-    "oxc-parser": "^0.107.0",
     "ts-morph": "^27.0.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
   }
 }
