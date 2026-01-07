@@ -18,6 +18,6 @@ describe('STYLE-015 Max Params', () => {
     const file = project.createSourceFile(TEST_FILENAME, code, { overwrite: true });
     const violations = maxParamsRule.check(file);
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('Maximum allowed is 4');
+    expect(violations[0]?.message).toContain('Maximum allowed is 4');
   });
 });

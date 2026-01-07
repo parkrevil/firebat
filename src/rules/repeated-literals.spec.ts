@@ -20,7 +20,7 @@ describe('STYLE-022 Repeated Literals', () => {
     const file = project.createSourceFile(TEST_FILENAME, code, { overwrite: true });
     const violations = repeatedLiteralsRule.check(file);
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain(FOO_ERROR_MSG);
+    expect(violations[0]?.message).toContain(FOO_ERROR_MSG);
   });
 
   it('should fail for repeated literals in exported constants', () => {
@@ -28,7 +28,7 @@ describe('STYLE-022 Repeated Literals', () => {
     const file = project.createSourceFile(TEST_FILENAME, code, { overwrite: true });
     const violations = repeatedLiteralsRule.check(file);
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain(FOO_ERROR_MSG);
+    expect(violations[0]?.message).toContain(FOO_ERROR_MSG);
   });
 
   it('should ignore imports', () => {

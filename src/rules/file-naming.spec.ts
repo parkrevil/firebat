@@ -16,7 +16,7 @@ describe('STYLE-001 File Naming', () => {
     const file = project.createSourceFile('UserController.ts', EMPTY_STRING, { overwrite: true });
     const violations = fileNamingRule.check(file);
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('not kebab-case');
+    expect(violations[0]?.message).toContain('not kebab-case');
   });
 
   it('should fail for camelCase filenames', () => {

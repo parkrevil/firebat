@@ -11,7 +11,7 @@ describe('STYLE-004 No Inline Object', () => {
     const file = project.createSourceFile(TEST_FILENAME, code, { overwrite: true });
     const violations = noInlineObjectRule.check(file);
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('Inline object type detected');
+    expect(violations[0]?.message).toContain('Inline object type detected');
   });
 
   it('should pass for named type', () => {
