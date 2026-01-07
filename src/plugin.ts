@@ -3,9 +3,15 @@ import { Project } from 'ts-morph';
 
 // --- Constants (Inlined) ---
 const RULE_FILE_NAMING = "file-naming";
+const RULE_NO_SINGLE_LETTER = "no-single-letter";
 const RULE_NO_INLINE_OBJECT = "no-inline-object";
-const RULE_MAX_PARAMS = "max-params";
 const RULE_TYPE_INTERFACE_SEPARATION = "type-interface-separation";
+const RULE_EXPLICIT_RETURN_TYPE = "explicit-return-type";
+const RULE_NO_LOCAL_CONSTANTS = "no-local-constants";
+const RULE_SHORTHAND_PROPERTY = "shorthand-property";
+const RULE_MAX_PARAMS = "max-params";
+const RULE_NO_BRACKET_NOTATION = "no-bracket-notation";
+const RULE_NULLISH_COALESCING = "nullish-coalescing";
 const RULE_ENUM_PASCAL_CASE = "enum-pascal-case";
 const RULE_REPEATED_LITERALS = "repeated-literals";
 
@@ -19,8 +25,6 @@ function isPascalCase(text) {
 }
 
 // --- ts-morph Helper ---
-// We create a single project instance to reuse across files if possible,
-// though oxlint might isolate execution contexts.
 let project;
 function getProject() {
     if (!project) {
@@ -41,8 +45,6 @@ const fileNamingRule = {
                 const filename = context.filename;
                 const parts = filename.split('/');
                 const baseName = parts[parts.length - 1];
-
-                // Allow reserved files
                 if (['index.ts', 'constants.ts', 'enums.ts', 'interfaces.ts', 'types.ts'].includes(baseName)) return;
 
                 let nameToCheck = baseName;
@@ -51,7 +53,7 @@ const fileNamingRule = {
                 } else if (nameToCheck.endsWith('.ts')) {
                      nameToCheck = nameToCheck.replace(/\.ts$/, '');
                 } else {
-                    return; // Ignore non-ts files
+                    return;
                 }
 
                 if (!isKebabCase(nameToCheck)) {
@@ -65,11 +67,31 @@ const fileNamingRule = {
     }
 };
 
+const noSingleLetterRule = {
+    create(context) {
+        return {
+            Identifier(node) {
+                if (node.name.length === 1 && !['i', 'j', 'k', '_', 'T'].includes(node.name)) {
+                    // Check parent type to exclude property usage etc.
+                    // This is a naive check, oxlint AST traversal context needed for accuracy.
+                    // But enforcing on declaration is safer.
+                    const parent = node.parent;
+                    if (parent && (parent.type === 'VariableDeclarator' || parent.type === 'FunctionDeclaration' || parent.type === 'ArrowFunctionExpression')) {
+                         context.report({
+                            message: `Identifier '${node.name}' is too short. Single letter identifiers are banned except loop indices/generics (STYLE-002).`,
+                            node,
+                        });
+                    }
+                }
+            }
+        };
+    }
+};
+
 const noInlineObjectRule = {
     create(context) {
         return {
             TSTypeLiteral(node) {
-                 // Check if parent is TypeAliasDeclaration
                  if (node.parent.type === 'TSTypeAliasDeclaration') {
                      return;
                  }
@@ -82,6 +104,69 @@ const noInlineObjectRule = {
     }
 };
 
+const explicitReturnTypeRule = {
+    create(context) {
+        return {
+            FunctionDeclaration(node) {
+                // Check if exported
+                // oxlint AST ExportNamedDeclaration -> declaration -> FunctionDeclaration
+                // If direct parent is Program, it's not exported unless default export?
+                // Or ExportNamedDeclaration contains it.
+                // Assuming we check all Public functions.
+                // Simplified: Check all top-level functions or exported ones if possible.
+                // Checking returnType property.
+                if (!node.returnType) {
+                     context.report({
+                        message: `Function '${node.id?.name}' is missing return type annotation (STYLE-007).`,
+                        node,
+                    });
+                }
+            },
+            // Also MethodDefinition, ArrowFunctionExpression if exported variable?
+        };
+    }
+};
+
+const noLocalConstantsRule = {
+    create(context) {
+        return {
+            VariableDeclaration(node) {
+                // If inside a function, and is 'const', and looks like SCREAMING_SNAKE_CASE (heuristic for constant), flag it.
+                // Or just banning local 'const' for magic values.
+                // STYLE-011: Local constants banned -> use class property or global constant.
+                // Heuristic: If it's a primitive const inside a block.
+                if (node.kind === 'const' && node.parent.type !== 'Program' && node.parent.type !== 'ExportNamedDeclaration') {
+                    // It is local.
+                    // Check names.
+                    node.declarations.forEach(decl => {
+                        if (decl.id.type === 'Identifier' && /^[A-Z][A-Z0-9_]+$/.test(decl.id.name)) {
+                             context.report({
+                                message: `Local constant '${decl.id.name}' detected. Move to class property or constants.ts (STYLE-011).`,
+                                node: decl,
+                            });
+                        }
+                    });
+                }
+            }
+        };
+    }
+};
+
+const shorthandPropertyRule = {
+    create(context) {
+        return {
+            Property(node) {
+                if (!node.shorthand && node.key.type === 'Identifier' && node.value.type === 'Identifier' && node.key.name === node.value.name) {
+                     context.report({
+                        message: `Use shorthand property for '${node.key.name}' (STYLE-014).`,
+                        node,
+                    });
+                }
+            }
+        };
+    }
+};
+
 const maxParamsRule = {
     create(context) {
         return {
@@ -89,6 +174,39 @@ const maxParamsRule = {
                 if (node.params.length > 4) {
                      context.report({
                         message: `Function has ${node.params.length} parameters. Maximum allowed is 4 (STYLE-015).`,
+                        node,
+                    });
+                }
+            }
+        };
+    }
+};
+
+const noBracketNotationRule = {
+    create(context) {
+        return {
+            MemberExpression(node) {
+                if (node.computed && node.property.type === 'Literal' && typeof node.property.value === 'string') {
+                    // Check if property name is valid identifier
+                    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(node.property.value)) {
+                         context.report({
+                            message: `Use dot notation instead of bracket notation for '${node.property.value}' (STYLE-018).`,
+                            node,
+                        });
+                    }
+                }
+            }
+        };
+    }
+};
+
+const nullishCoalescingRule = {
+    create(context) {
+        return {
+            LogicalExpression(node) {
+                if (node.operator === '||') {
+                     context.report({
+                        message: `Prefer '??' (nullish coalescing) over '||' if strictly checking for null/undefined (STYLE-019).`,
                         node,
                     });
                 }
@@ -119,33 +237,21 @@ const typeInterfaceSeparationRule = {
     create(context) {
         return {
             Program(node) {
-                // Feasibility Proof: Using ts-morph to parse the file content.
-                // Note: context.sourceCode.text gives the full content.
                 const filename = context.filename;
                 const sourceText = context.sourceCode.text;
-
-                // If file is safe, skip
                 if (filename.endsWith('types.ts') || filename.endsWith('interfaces.ts') || filename.endsWith('.d.ts')) return;
 
-                // Use ts-morph to find violations.
-                // This is heavier than oxlint AST but demonstrates capability.
                 const proj = getProject();
-                // Create a source file in memory
                 const sourceFile = proj.createSourceFile(filename, sourceText, { overwrite: true });
 
-                // Check for Interfaces
                 const interfaces = sourceFile.getInterfaces();
                 for (const iface of interfaces) {
-                    // Report on the node corresponding to the interface start.
-                    // We need to map ts-morph node back to oxlint node or just report on Program with location.
-                    // For MVP/PoC, we report on Program node but with message detailing the violation.
                     context.report({
                         message: `Interface '${iface.getName()}' should be in interfaces.ts (STYLE-005) [Verified by ts-morph].`,
                         node,
                     });
                 }
 
-                // Check for Type Aliases
                 const types = sourceFile.getTypeAliases();
                 for (const typeAlias of types) {
                     context.report({
@@ -202,9 +308,15 @@ const plugin = {
   },
   rules: {
     [RULE_FILE_NAMING]: fileNamingRule,
+    [RULE_NO_SINGLE_LETTER]: noSingleLetterRule,
     [RULE_NO_INLINE_OBJECT]: noInlineObjectRule,
-    [RULE_MAX_PARAMS]: maxParamsRule,
     [RULE_TYPE_INTERFACE_SEPARATION]: typeInterfaceSeparationRule,
+    [RULE_EXPLICIT_RETURN_TYPE]: explicitReturnTypeRule,
+    [RULE_NO_LOCAL_CONSTANTS]: noLocalConstantsRule,
+    [RULE_SHORTHAND_PROPERTY]: shorthandPropertyRule,
+    [RULE_MAX_PARAMS]: maxParamsRule,
+    [RULE_NO_BRACKET_NOTATION]: noBracketNotationRule,
+    [RULE_NULLISH_COALESCING]: nullishCoalescingRule,
     [RULE_ENUM_PASCAL_CASE]: enumPascalCaseRule,
     [RULE_REPEATED_LITERALS]: repeatedLiteralsRule
   },
