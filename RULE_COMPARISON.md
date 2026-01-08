@@ -1,98 +1,683 @@
-# Rule Comparison: Bun-Checker vs Oxlint
+# Rule Comparison: Oxlint vs Bun-Checker-Plugin
 
-This document compares the style rules defined in `STYLEGUIDE.md` with the native capabilities of `oxlint` and the custom implementation in `bun-checker-plugin`.
+This document lists ALL native oxlint rules and identifies overlaps with the `bun-checker-plugin` implementation of the Style Guide.
 
-## Summary
+## Oxlint Rules Analysis
 
-| ID | Rule Name | Oxlint Native | Custom Plugin | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| STYLE-001 | File Naming (kebab-case) | ❌ No (Exact logic) | ✅ Implemented | Done |
-| STYLE-002 | No Single Letter Identifiers | ❌ No | ✅ Implemented | Done |
-| STYLE-003 | No Abbreviations | ❌ No (Exact logic) | ✅ Implemented | Done |
-| STYLE-004 | No Inline Object Types | ❌ No | ✅ Implemented | Done |
-| STYLE-005 | Type/Interface Separation | ❌ No | ✅ Implemented | Done |
-| STYLE-006 | No explicit any | ✅ `typescript/no-explicit-any` | - | Native Used |
-| STYLE-007 | Explicit Return Type | ❌ No | ✅ Implemented | Done |
-| STYLE-009 | Force Curly Block | ❌ No (Exact logic) | ✅ Implemented | Done |
-| STYLE-011 | No Local Constants | ❌ No | ✅ Implemented | Done |
-| STYLE-012 | Generic Naming | ❌ No | ✅ Implemented | Done |
-| STYLE-014 | Shorthand Property | ✅ `object-shorthand` | ✅ Implemented | Custom Preferred |
-| STYLE-015 | Max Function Params (4) | ✅ `max-params` | ✅ Implemented | Custom Preferred |
-| STYLE-018 | No Bracket Notation | ✅ `dot-notation` | ✅ Implemented | Custom Preferred |
-| STYLE-019 | Nullish Coalescing | ❌ No | ✅ Implemented | Done |
-| STYLE-021 | Enum Member PascalCase | ❌ No | ✅ Implemented | Done |
-| STYLE-022 | Repeated Literals | ❌ No | ✅ Implemented | Done |
-| STYLE-023 | Restrict Spread | ❌ No | ✅ Implemented | Done |
+| Rule Name | Source | Category | Overlap / Plugin Status |
+| :--- | :--- | :--- | :--- |
+| constructor-super | eslint | Correctness (206): | - |
+| for-direction | eslint | Correctness (206): | - |
+| no-async-promise-executor | eslint | Correctness (206): | - |
+| no-caller | eslint | Correctness (206): | - |
+| no-class-assign | eslint | Correctness (206): | - |
+| no-compare-neg-zero | eslint | Correctness (206): | - |
+| no-cond-assign | eslint | Correctness (206): | - |
+| no-const-assign | eslint | Correctness (206): | - |
+| no-constant-binary-expression | eslint | Correctness (206): | - |
+| no-constant-condition | eslint | Correctness (206): | - |
+| no-control-regex | eslint | Correctness (206): | - |
+| no-debugger | eslint | Correctness (206): | - |
+| no-delete-var | eslint | Correctness (206): | - |
+| no-dupe-class-members | eslint | Correctness (206): | - |
+| no-dupe-else-if | eslint | Correctness (206): | - |
+| no-dupe-keys | eslint | Correctness (206): | - |
+| no-duplicate-case | eslint | Correctness (206): | - |
+| no-empty-character-class | eslint | Correctness (206): | - |
+| no-empty-pattern | eslint | Correctness (206): | - |
+| no-empty-static-block | eslint | Correctness (206): | - |
+| no-eval | eslint | Correctness (206): | - |
+| no-ex-assign | eslint | Correctness (206): | - |
+| no-extra-boolean-cast | eslint | Correctness (206): | - |
+| no-func-assign | eslint | Correctness (206): | - |
+| no-global-assign | eslint | Correctness (206): | - |
+| no-import-assign | eslint | Correctness (206): | - |
+| no-invalid-regexp | eslint | Correctness (206): | - |
+| no-irregular-whitespace | eslint | Correctness (206): | - |
+| no-loss-of-precision | eslint | Correctness (206): | - |
+| no-new-native-nonconstructor | eslint | Correctness (206): | - |
+| no-nonoctal-decimal-escape | eslint | Correctness (206): | - |
+| no-obj-calls | eslint | Correctness (206): | - |
+| no-self-assign | eslint | Correctness (206): | - |
+| no-setter-return | eslint | Correctness (206): | - |
+| no-shadow-restricted-names | eslint | Correctness (206): | - |
+| no-sparse-arrays | eslint | Correctness (206): | - |
+| no-this-before-super | eslint | Correctness (206): | - |
+| no-unassigned-vars | eslint | Correctness (206): | - |
+| no-unsafe-finally | eslint | Correctness (206): | - |
+| no-unsafe-negation | eslint | Correctness (206): | - |
+| no-unsafe-optional-chaining | eslint | Correctness (206): | - |
+| no-unused-expressions | eslint | Correctness (206): | - |
+| no-unused-labels | eslint | Correctness (206): | - |
+| no-unused-private-class-members | eslint | Correctness (206): | - |
+| no-unused-vars | eslint | Correctness (206): | - |
+| no-useless-backreference | eslint | Correctness (206): | - |
+| no-useless-catch | eslint | Correctness (206): | - |
+| no-useless-escape | eslint | Correctness (206): | - |
+| no-useless-rename | eslint | Correctness (206): | - |
+| no-with | eslint | Correctness (206): | - |
+| require-yield | eslint | Correctness (206): | - |
+| use-isnan | eslint | Correctness (206): | - |
+| valid-typeof | eslint | Correctness (206): | - |
+| default | import | Correctness (206): | - |
+| namespace | import | Correctness (206): | - |
+| expect-expect | jest | Correctness (206): | - |
+| no-conditional-expect | jest | Correctness (206): | - |
+| no-disabled-tests | jest | Correctness (206): | - |
+| no-export | jest | Correctness (206): | - |
+| no-focused-tests | jest | Correctness (206): | - |
+| no-standalone-expect | jest | Correctness (206): | - |
+| require-to-throw-message | jest | Correctness (206): | - |
+| valid-describe-callback | jest | Correctness (206): | - |
+| valid-expect | jest | Correctness (206): | - |
+| valid-title | jest | Correctness (206): | - |
+| check-property-names | jsdoc | Correctness (206): | - |
+| check-tag-names | jsdoc | Correctness (206): | - |
+| implements-on-classes | jsdoc | Correctness (206): | - |
+| no-defaults | jsdoc | Correctness (206): | - |
+| require-property | jsdoc | Correctness (206): | - |
+| require-property-description | jsdoc | Correctness (206): | - |
+| require-property-name | jsdoc | Correctness (206): | - |
+| require-property-type | jsdoc | Correctness (206): | - |
+| require-yields | jsdoc | Correctness (206): | - |
+| alt-text | jsx_a11y | Correctness (206): | - |
+| anchor-has-content | jsx_a11y | Correctness (206): | - |
+| anchor-is-valid | jsx_a11y | Correctness (206): | - |
+| aria-activedescendant-has-tabindex | jsx_a11y | Correctness (206): | - |
+| aria-props | jsx_a11y | Correctness (206): | - |
+| aria-proptypes | jsx_a11y | Correctness (206): | - |
+| aria-role | jsx_a11y | Correctness (206): | - |
+| aria-unsupported-elements | jsx_a11y | Correctness (206): | - |
+| autocomplete-valid | jsx_a11y | Correctness (206): | - |
+| click-events-have-key-events | jsx_a11y | Correctness (206): | - |
+| heading-has-content | jsx_a11y | Correctness (206): | - |
+| html-has-lang | jsx_a11y | Correctness (206): | - |
+| iframe-has-title | jsx_a11y | Correctness (206): | - |
+| img-redundant-alt | jsx_a11y | Correctness (206): | - |
+| label-has-associated-control | jsx_a11y | Correctness (206): | - |
+| lang | jsx_a11y | Correctness (206): | - |
+| media-has-caption | jsx_a11y | Correctness (206): | - |
+| mouse-events-have-key-events | jsx_a11y | Correctness (206): | - |
+| no-access-key | jsx_a11y | Correctness (206): | - |
+| no-aria-hidden-on-focusable | jsx_a11y | Correctness (206): | - |
+| no-autofocus | jsx_a11y | Correctness (206): | - |
+| no-distracting-elements | jsx_a11y | Correctness (206): | - |
+| no-noninteractive-tabindex | jsx_a11y | Correctness (206): | - |
+| no-redundant-roles | jsx_a11y | Correctness (206): | - |
+| no-static-element-interactions | jsx_a11y | Correctness (206): | - |
+| prefer-tag-over-role | jsx_a11y | Correctness (206): | - |
+| role-has-required-aria-props | jsx_a11y | Correctness (206): | - |
+| role-supports-aria-props | jsx_a11y | Correctness (206): | - |
+| scope | jsx_a11y | Correctness (206): | - |
+| tabindex-no-positive | jsx_a11y | Correctness (206): | - |
+| google-font-display | nextjs | Correctness (206): | - |
+| google-font-preconnect | nextjs | Correctness (206): | - |
+| inline-script-id | nextjs | Correctness (206): | - |
+| next-script-for-ga | nextjs | Correctness (206): | - |
+| no-assign-module-variable | nextjs | Correctness (206): | - |
+| no-async-client-component | nextjs | Correctness (206): | - |
+| no-before-interactive-script-outside-document | nextjs | Correctness (206): | - |
+| no-css-tags | nextjs | Correctness (206): | - |
+| no-document-import-in-page | nextjs | Correctness (206): | - |
+| no-duplicate-head | nextjs | Correctness (206): | - |
+| no-head-element | nextjs | Correctness (206): | - |
+| no-head-import-in-document | nextjs | Correctness (206): | - |
+| no-html-link-for-pages | nextjs | Correctness (206): | - |
+| no-img-element | nextjs | Correctness (206): | - |
+| no-page-custom-font | nextjs | Correctness (206): | - |
+| no-script-component-in-head | nextjs | Correctness (206): | - |
+| no-styled-jsx-in-document | nextjs | Correctness (206): | - |
+| no-sync-scripts | nextjs | Correctness (206): | - |
+| no-title-in-document-head | nextjs | Correctness (206): | - |
+| no-typos | nextjs | Correctness (206): | - |
+| no-unwanted-polyfillio | nextjs | Correctness (206): | - |
+| bad-array-method-on-arguments | oxc | Correctness (206): | - |
+| bad-char-at-comparison | oxc | Correctness (206): | - |
+| bad-comparison-sequence | oxc | Correctness (206): | - |
+| bad-min-max-func | oxc | Correctness (206): | - |
+| bad-object-literal-comparison | oxc | Correctness (206): | - |
+| bad-replace-all-arg | oxc | Correctness (206): | - |
+| const-comparisons | oxc | Correctness (206): | - |
+| double-comparisons | oxc | Correctness (206): | - |
+| erasing-op | oxc | Correctness (206): | - |
+| missing-throw | oxc | Correctness (206): | - |
+| number-arg-out-of-range | oxc | Correctness (206): | - |
+| only-used-in-recursion | oxc | Correctness (206): | - |
+| uninvoked-array-callback | oxc | Correctness (206): | - |
+| no-callback-in-promise | promise | Correctness (206): | - |
+| no-new-statics | promise | Correctness (206): | - |
+| valid-params | promise | Correctness (206): | - |
+| exhaustive-deps | react | Correctness (206): | - |
+| forward-ref-uses-ref | react | Correctness (206): | - |
+| jsx-key | react | Correctness (206): | - |
+| jsx-no-duplicate-props | react | Correctness (206): | - |
+| jsx-no-undef | react | Correctness (206): | - |
+| jsx-props-no-spread-multi | react | Correctness (206): | - |
+| no-children-prop | react | Correctness (206): | - |
+| no-danger-with-children | react | Correctness (206): | - |
+| no-did-mount-set-state | react | Correctness (206): | - |
+| no-direct-mutation-state | react | Correctness (206): | - |
+| no-find-dom-node | react | Correctness (206): | - |
+| no-is-mounted | react | Correctness (206): | - |
+| no-render-return-value | react | Correctness (206): | - |
+| no-string-refs | react | Correctness (206): | - |
+| no-this-in-sfc | react | Correctness (206): | - |
+| no-unsafe | react | Correctness (206): | - |
+| no-will-update-set-state | react | Correctness (206): | - |
+| void-dom-elements-no-children | react | Correctness (206): | - |
+| await-thenable | typescript | Correctness (206): | - |
+| no-array-delete | typescript | Correctness (206): | - |
+| no-base-to-string | typescript | Correctness (206): | - |
+| no-duplicate-enum-values | typescript | Correctness (206): | - |
+| no-duplicate-type-constituents | typescript | Correctness (206): | - |
+| no-extra-non-null-assertion | typescript | Correctness (206): | - |
+| no-floating-promises | typescript | Correctness (206): | - |
+| no-for-in-array | typescript | Correctness (206): | - |
+| no-implied-eval | typescript | Correctness (206): | - |
+| no-meaningless-void-operator | typescript | Correctness (206): | - |
+| no-misused-new | typescript | Correctness (206): | - |
+| no-misused-spread | typescript | Correctness (206): | - |
+| no-non-null-asserted-optional-chain | typescript | Correctness (206): | - |
+| no-redundant-type-constituents | typescript | Correctness (206): | - |
+| no-this-alias | typescript | Correctness (206): | - |
+| no-unnecessary-parameter-property-assignment | typescript | Correctness (206): | - |
+| no-unsafe-declaration-merging | typescript | Correctness (206): | - |
+| no-unsafe-unary-minus | typescript | Correctness (206): | - |
+| no-useless-empty-export | typescript | Correctness (206): | - |
+| no-wrapper-object-types | typescript | Correctness (206): | - |
+| prefer-as-const | typescript | Correctness (206): | - |
+| require-array-sort-compare | typescript | Correctness (206): | - |
+| restrict-template-expressions | typescript | Correctness (206): | - |
+| triple-slash-reference | typescript | Correctness (206): | - |
+| unbound-method | typescript | Correctness (206): | - |
+| no-await-in-promise-methods | unicorn | Correctness (206): | - |
+| no-empty-file | unicorn | Correctness (206): | - |
+| no-invalid-fetch-options | unicorn | Correctness (206): | - |
+| no-invalid-remove-event-listener | unicorn | Correctness (206): | - |
+| no-new-array | unicorn | Correctness (206): | - |
+| no-single-promise-in-promise-methods | unicorn | Correctness (206): | - |
+| no-thenable | unicorn | Correctness (206): | - |
+| no-unnecessary-await | unicorn | Correctness (206): | - |
+| no-useless-fallback-in-spread | unicorn | Correctness (206): | - |
+| no-useless-length-check | unicorn | Correctness (206): | - |
+| no-useless-spread | unicorn | Correctness (206): | - |
+| prefer-set-size | unicorn | Correctness (206): | - |
+| prefer-string-starts-ends-with | unicorn | Correctness (206): | - |
+| no-conditional-tests | vitest | Correctness (206): | - |
+| require-local-test-context-for-concurrent-snapshots | vitest | Correctness (206): | - |
+| warn-todo | vitest | Correctness (206): | - |
+| no-deprecated-destroyed-lifecycle | vue | Correctness (206): | - |
+| no-export-in-script-setup | vue | Correctness (206): | - |
+| no-this-in-before-route-enter | vue | Correctness (206): | - |
+| prefer-import-from-vue | vue | Correctness (206): | - |
+| valid-define-emits | vue | Correctness (206): | - |
+| valid-define-props | vue | Correctness (206): | - |
+| no-await-in-loop | eslint | Perf (12): | - |
+| no-useless-call | eslint | Perf (12): | - |
+| no-accumulating-spread | oxc | Perf (12): | - |
+| no-map-spread | oxc | Perf (12): | - |
+| no-array-index-key | react | Perf (12): | - |
+| jsx-no-jsx-as-prop | react_perf | Perf (12): | - |
+| jsx-no-new-array-as-prop | react_perf | Perf (12): | - |
+| jsx-no-new-function-as-prop | react_perf | Perf (12): | - |
+| jsx-no-new-object-as-prop | react_perf | Perf (12): | - |
+| prefer-array-find | unicorn | Perf (12): | - |
+| prefer-array-flat-map | unicorn | Perf (12): | - |
+| prefer-set-has | unicorn | Perf (12): | - |
+| class-methods-use-this | eslint | Restriction (81): | - |
+| complexity | eslint | Restriction (81): | - |
+| default-case | eslint | Restriction (81): | - |
+| no-alert | eslint | Restriction (81): | - |
+| no-bitwise | eslint | Restriction (81): | - |
+| no-console | eslint | Restriction (81): | - |
+| no-div-regex | eslint | Restriction (81): | - |
+| no-empty | eslint | Restriction (81): | - |
+| no-empty-function | eslint | Restriction (81): | - |
+| no-eq-null | eslint | Restriction (81): | - |
+| no-iterator | eslint | Restriction (81): | - |
+| no-param-reassign | eslint | Restriction (81): | - |
+| no-plusplus | eslint | Restriction (81): | - |
+| no-proto | eslint | Restriction (81): | - |
+| no-regex-spaces | eslint | Restriction (81): | - |
+| no-restricted-globals | eslint | Restriction (81): | - |
+| no-restricted-imports | eslint | Restriction (81): | - |
+| no-sequences | eslint | Restriction (81): | - |
+| no-undefined | eslint | Restriction (81): | - |
+| no-var | eslint | Restriction (81): | - |
+| no-void | eslint | Restriction (81): | - |
+| unicode-bom | eslint | Restriction (81): | - |
+| extensions | import | Restriction (81): | - |
+| no-amd | import | Restriction (81): | - |
+| no-commonjs | import | Restriction (81): | - |
+| no-cycle | import | Restriction (81): | - |
+| no-default-export | import | Restriction (81): | - |
+| no-dynamic-require | import | Restriction (81): | - |
+| no-webpack-loader-syntax | import | Restriction (81): | - |
+| unambiguous | import | Restriction (81): | - |
+| check-access | jsdoc | Restriction (81): | - |
+| empty-tags | jsdoc | Restriction (81): | - |
+| anchor-ambiguous-text | jsx_a11y | Restriction (81): | - |
+| no-new-require | node | Restriction (81): | - |
+| no-process-env | node | Restriction (81): | - |
+| bad-bitwise-operator | oxc | Restriction (81): | - |
+| no-async-await | oxc | Restriction (81): | - |
+| no-barrel-file | oxc | Restriction (81): | - |
+| no-const-enum | oxc | Restriction (81): | - |
+| no-optional-chaining | oxc | Restriction (81): | - |
+| no-rest-spread-properties | oxc | Restriction (81): | - |
+| catch-or-return | promise | Restriction (81): | - |
+| spec-only | promise | Restriction (81): | - |
+| button-has-type | react | Restriction (81): | - |
+| forbid-dom-props | react | Restriction (81): | - |
+| forbid-elements | react | Restriction (81): | - |
+| jsx-filename-extension | react | Restriction (81): | - |
+| no-danger | react | Restriction (81): | - |
+| no-unknown-property | react | Restriction (81): | - |
+| only-export-components | react | Restriction (81): | - |
+| explicit-function-return-type | typescript | Restriction (81): | Plugin: explicit-return-type (STYLE-007) |
+| explicit-module-boundary-types | typescript | Restriction (81): | - |
+| no-dynamic-delete | typescript | Restriction (81): | - |
+| no-empty-object-type | typescript | Restriction (81): | - |
+| no-explicit-any | typescript | Restriction (81): | Native Rule Used (STYLE-006) |
+| no-import-type-side-effects | typescript | Restriction (81): | - |
+| no-namespace | typescript | Restriction (81): | - |
+| no-non-null-asserted-nullish-coalescing | typescript | Restriction (81): | - |
+| no-non-null-assertion | typescript | Restriction (81): | - |
+| no-require-imports | typescript | Restriction (81): | - |
+| no-restricted-types | typescript | Restriction (81): | - |
+| no-var-requires | typescript | Restriction (81): | - |
+| non-nullable-type-assertion-style | typescript | Restriction (81): | - |
+| prefer-literal-enum-member | typescript | Restriction (81): | - |
+| promise-function-async | typescript | Restriction (81): | - |
+| use-unknown-in-catch-callback-variable | typescript | Restriction (81): | - |
+| no-abusive-eslint-disable | unicorn | Restriction (81): | - |
+| no-anonymous-default-export | unicorn | Restriction (81): | - |
+| no-array-for-each | unicorn | Restriction (81): | - |
+| no-array-reduce | unicorn | Restriction (81): | - |
+| no-document-cookie | unicorn | Restriction (81): | - |
+| no-length-as-slice-end | unicorn | Restriction (81): | - |
+| no-magic-array-flat-depth | unicorn | Restriction (81): | - |
+| no-process-exit | unicorn | Restriction (81): | - |
+| no-useless-error-capture-stack-trace | unicorn | Restriction (81): | - |
+| prefer-modern-math-apis | unicorn | Restriction (81): | - |
+| prefer-node-protocol | unicorn | Restriction (81): | - |
+| prefer-number-properties | unicorn | Restriction (81): | - |
+| max-props | vue | Restriction (81): | - |
+| no-import-compiler-macros | vue | Restriction (81): | - |
+| no-multiple-slot-args | vue | Restriction (81): | - |
+| block-scoped-var | eslint | Suspicious (48): | - |
+| no-extend-native | eslint | Suspicious (48): | - |
+| no-extra-bind | eslint | Suspicious (48): | - |
+| no-new | eslint | Suspicious (48): | - |
+| no-unexpected-multiline | eslint | Suspicious (48): | - |
+| no-unneeded-ternary | eslint | Suspicious (48): | - |
+| no-useless-concat | eslint | Suspicious (48): | - |
+| no-useless-constructor | eslint | Suspicious (48): | - |
+| preserve-caught-error | eslint | Suspicious (48): | - |
+| no-absolute-path | import | Suspicious (48): | - |
+| no-empty-named-blocks | import | Suspicious (48): | - |
+| no-named-as-default | import | Suspicious (48): | - |
+| no-named-as-default-member | import | Suspicious (48): | - |
+| no-self-import | import | Suspicious (48): | - |
+| no-unassigned-import | import | Suspicious (48): | - |
+| no-commented-out-tests | jest | Suspicious (48): | - |
+| approx-constant | oxc | Suspicious (48): | - |
+| misrefactored-assign-op | oxc | Suspicious (48): | - |
+| no-async-endpoint-handlers | oxc | Suspicious (48): | - |
+| no-this-in-exported-function | oxc | Suspicious (48): | - |
+| always-return | promise | Suspicious (48): | - |
+| no-multiple-resolved | promise | Suspicious (48): | - |
+| no-promise-in-callback | promise | Suspicious (48): | - |
+| iframe-missing-sandbox | react | Suspicious (48): | - |
+| jsx-no-comment-textnodes | react | Suspicious (48): | - |
+| jsx-no-script-url | react | Suspicious (48): | - |
+| no-namespace | react | Suspicious (48): | - |
+| react-in-jsx-scope | react | Suspicious (48): | - |
+| style-prop-object | react | Suspicious (48): | - |
+| no-confusing-non-null-assertion | typescript | Suspicious (48): | - |
+| no-extraneous-class | typescript | Suspicious (48): | - |
+| no-unnecessary-boolean-literal-compare | typescript | Suspicious (48): | - |
+| no-unnecessary-template-expression | typescript | Suspicious (48): | - |
+| no-unnecessary-type-arguments | typescript | Suspicious (48): | - |
+| no-unnecessary-type-assertion | typescript | Suspicious (48): | - |
+| no-unnecessary-type-constraint | typescript | Suspicious (48): | - |
+| no-unsafe-enum-comparison | typescript | Suspicious (48): | - |
+| no-unsafe-type-assertion | typescript | Suspicious (48): | - |
+| consistent-function-scoping | unicorn | Suspicious (48): | - |
+| no-accessor-recursion | unicorn | Suspicious (48): | - |
+| no-array-reverse | unicorn | Suspicious (48): | - |
+| no-array-sort | unicorn | Suspicious (48): | - |
+| no-instanceof-builtins | unicorn | Suspicious (48): | - |
+| prefer-add-event-listener | unicorn | Suspicious (48): | - |
+| require-module-specifiers | unicorn | Suspicious (48): | - |
+| require-post-message-target-origin | unicorn | Suspicious (48): | - |
+| no-required-prop-with-default | vue | Suspicious (48): | - |
+| require-default-export | vue | Suspicious (48): | - |
+| accessor-pairs | eslint | Pedantic (113): | - |
+| array-callback-return | eslint | Pedantic (113): | - |
+| eqeqeq | eslint | Pedantic (113): | - |
+| max-classes-per-file | eslint | Pedantic (113): | - |
+| max-depth | eslint | Pedantic (113): | - |
+| max-lines | eslint | Pedantic (113): | - |
+| max-lines-per-function | eslint | Pedantic (113): | - |
+| max-nested-callbacks | eslint | Pedantic (113): | - |
+| no-array-constructor | eslint | Pedantic (113): | - |
+| no-case-declarations | eslint | Pedantic (113): | - |
+| no-constructor-return | eslint | Pedantic (113): | - |
+| no-else-return | eslint | Pedantic (113): | - |
+| no-fallthrough | eslint | Pedantic (113): | - |
+| no-inline-comments | eslint | Pedantic (113): | - |
+| no-inner-declarations | eslint | Pedantic (113): | - |
+| no-lonely-if | eslint | Pedantic (113): | - |
+| no-loop-func | eslint | Pedantic (113): | - |
+| no-negated-condition | eslint | Pedantic (113): | - |
+| no-new-wrappers | eslint | Pedantic (113): | - |
+| no-object-constructor | eslint | Pedantic (113): | - |
+| no-promise-executor-return | eslint | Pedantic (113): | - |
+| no-prototype-builtins | eslint | Pedantic (113): | - |
+| no-redeclare | eslint | Pedantic (113): | - |
+| no-self-compare | eslint | Pedantic (113): | - |
+| no-throw-literal | eslint | Pedantic (113): | - |
+| no-useless-return | eslint | Pedantic (113): | - |
+| no-warning-comments | eslint | Pedantic (113): | - |
+| radix | eslint | Pedantic (113): | - |
+| require-await | eslint | Pedantic (113): | - |
+| sort-vars | eslint | Pedantic (113): | - |
+| symbol-description | eslint | Pedantic (113): | - |
+| max-dependencies | import | Pedantic (113): | - |
+| no-conditional-in-test | jest | Pedantic (113): | - |
+| require-param | jsdoc | Pedantic (113): | - |
+| require-param-description | jsdoc | Pedantic (113): | - |
+| require-param-name | jsdoc | Pedantic (113): | - |
+| require-param-type | jsdoc | Pedantic (113): | - |
+| require-returns | jsdoc | Pedantic (113): | - |
+| require-returns-description | jsdoc | Pedantic (113): | - |
+| require-returns-type | jsdoc | Pedantic (113): | - |
+| checked-requires-onchange-or-readonly | react | Pedantic (113): | - |
+| jsx-no-target-blank | react | Pedantic (113): | - |
+| jsx-no-useless-fragment | react | Pedantic (113): | - |
+| no-unescaped-entities | react | Pedantic (113): | - |
+| rules-of-hooks | react | Pedantic (113): | - |
+| ban-ts-comment | typescript | Pedantic (113): | - |
+| ban-types | typescript | Pedantic (113): | - |
+| no-confusing-void-expression | typescript | Pedantic (113): | - |
+| no-deprecated | typescript | Pedantic (113): | - |
+| no-misused-promises | typescript | Pedantic (113): | - |
+| no-mixed-enums | typescript | Pedantic (113): | - |
+| no-unsafe-argument | typescript | Pedantic (113): | - |
+| no-unsafe-assignment | typescript | Pedantic (113): | - |
+| no-unsafe-call | typescript | Pedantic (113): | - |
+| no-unsafe-function-type | typescript | Pedantic (113): | - |
+| no-unsafe-member-access | typescript | Pedantic (113): | - |
+| no-unsafe-return | typescript | Pedantic (113): | - |
+| only-throw-error | typescript | Pedantic (113): | - |
+| prefer-enum-initializers | typescript | Pedantic (113): | - |
+| prefer-includes | typescript | Pedantic (113): | - |
+| prefer-nullish-coalescing | typescript | Pedantic (113): | Plugin: nullish-coalescing (STYLE-019) / Native exists |
+| prefer-promise-reject-errors | typescript | Pedantic (113): | - |
+| prefer-ts-expect-error | typescript | Pedantic (113): | - |
+| related-getter-setter-pairs | typescript | Pedantic (113): | - |
+| require-await | typescript | Pedantic (113): | - |
+| restrict-plus-operands | typescript | Pedantic (113): | - |
+| return-await | typescript | Pedantic (113): | - |
+| strict-boolean-expressions | typescript | Pedantic (113): | - |
+| switch-exhaustiveness-check | typescript | Pedantic (113): | - |
+| consistent-assert | unicorn | Pedantic (113): | - |
+| consistent-empty-array-spread | unicorn | Pedantic (113): | - |
+| escape-case | unicorn | Pedantic (113): | - |
+| explicit-length-check | unicorn | Pedantic (113): | - |
+| new-for-builtins | unicorn | Pedantic (113): | - |
+| no-array-callback-reference | unicorn | Pedantic (113): | - |
+| no-hex-escape | unicorn | Pedantic (113): | - |
+| no-immediate-mutation | unicorn | Pedantic (113): | - |
+| no-instanceof-array | unicorn | Pedantic (113): | - |
+| no-lonely-if | unicorn | Pedantic (113): | - |
+| no-negation-in-equality-check | unicorn | Pedantic (113): | - |
+| no-new-buffer | unicorn | Pedantic (113): | - |
+| no-object-as-default-parameter | unicorn | Pedantic (113): | - |
+| no-static-only-class | unicorn | Pedantic (113): | - |
+| no-this-assignment | unicorn | Pedantic (113): | - |
+| no-typeof-undefined | unicorn | Pedantic (113): | - |
+| no-unnecessary-array-flat-depth | unicorn | Pedantic (113): | - |
+| no-unnecessary-array-splice-count | unicorn | Pedantic (113): | - |
+| no-unnecessary-slice-end | unicorn | Pedantic (113): | - |
+| no-unreadable-iife | unicorn | Pedantic (113): | - |
+| no-useless-promise-resolve-reject | unicorn | Pedantic (113): | - |
+| no-useless-switch-case | unicorn | Pedantic (113): | - |
+| no-useless-undefined | unicorn | Pedantic (113): | - |
+| prefer-array-flat | unicorn | Pedantic (113): | - |
+| prefer-array-some | unicorn | Pedantic (113): | - |
+| prefer-at | unicorn | Pedantic (113): | - |
+| prefer-blob-reading-methods | unicorn | Pedantic (113): | - |
+| prefer-code-point | unicorn | Pedantic (113): | - |
+| prefer-date-now | unicorn | Pedantic (113): | - |
+| prefer-dom-node-append | unicorn | Pedantic (113): | - |
+| prefer-dom-node-dataset | unicorn | Pedantic (113): | - |
+| prefer-dom-node-remove | unicorn | Pedantic (113): | - |
+| prefer-event-target | unicorn | Pedantic (113): | - |
+| prefer-math-min-max | unicorn | Pedantic (113): | - |
+| prefer-math-trunc | unicorn | Pedantic (113): | - |
+| prefer-native-coercion-functions | unicorn | Pedantic (113): | - |
+| prefer-prototype-methods | unicorn | Pedantic (113): | - |
+| prefer-query-selector | unicorn | Pedantic (113): | - |
+| prefer-regexp-test | unicorn | Pedantic (113): | - |
+| prefer-string-replace-all | unicorn | Pedantic (113): | - |
+| prefer-string-slice | unicorn | Pedantic (113): | - |
+| prefer-top-level-await | unicorn | Pedantic (113): | - |
+| prefer-type-error | unicorn | Pedantic (113): | - |
+| require-number-to-fixed-digits-argument | unicorn | Pedantic (113): | - |
+| arrow-body-style | eslint | Style (183): | - |
+| capitalized-comments | eslint | Style (183): | - |
+| curly | eslint | Style (183): | Plugin: force-curly-block (STYLE-009) / Native exists |
+| default-case-last | eslint | Style (183): | - |
+| default-param-last | eslint | Style (183): | - |
+| func-names | eslint | Style (183): | - |
+| func-style | eslint | Style (183): | - |
+| grouped-accessor-pairs | eslint | Style (183): | - |
+| guard-for-in | eslint | Style (183): | - |
+| id-length | eslint | Style (183): | Plugin: no-single-letter (STYLE-002) |
+| init-declarations | eslint | Style (183): | - |
+| max-params | eslint | Style (183): | Native Rule Used / Plugin: max-params (STYLE-015) |
+| max-statements | eslint | Style (183): | - |
+| new-cap | eslint | Style (183): | - |
+| no-continue | eslint | Style (183): | - |
+| no-duplicate-imports | eslint | Style (183): | - |
+| no-extra-label | eslint | Style (183): | - |
+| no-implicit-coercion | eslint | Style (183): | - |
+| no-label-var | eslint | Style (183): | - |
+| no-labels | eslint | Style (183): | - |
+| no-lone-blocks | eslint | Style (183): | - |
+| no-magic-numbers | eslint | Style (183): | - |
+| no-multi-assign | eslint | Style (183): | - |
+| no-multi-str | eslint | Style (183): | - |
+| no-nested-ternary | eslint | Style (183): | - |
+| no-new-func | eslint | Style (183): | - |
+| no-return-assign | eslint | Style (183): | - |
+| no-script-url | eslint | Style (183): | - |
+| no-template-curly-in-string | eslint | Style (183): | - |
+| no-ternary | eslint | Style (183): | - |
+| no-useless-computed-key | eslint | Style (183): | - |
+| operator-assignment | eslint | Style (183): | - |
+| prefer-destructuring | eslint | Style (183): | - |
+| prefer-exponentiation-operator | eslint | Style (183): | - |
+| prefer-numeric-literals | eslint | Style (183): | - |
+| prefer-object-has-own | eslint | Style (183): | - |
+| prefer-object-spread | eslint | Style (183): | - |
+| prefer-promise-reject-errors | eslint | Style (183): | - |
+| prefer-rest-params | eslint | Style (183): | - |
+| prefer-spread | eslint | Style (183): | - |
+| prefer-template | eslint | Style (183): | - |
+| sort-imports | eslint | Style (183): | - |
+| sort-keys | eslint | Style (183): | - |
+| vars-on-top | eslint | Style (183): | - |
+| yoda | eslint | Style (183): | - |
+| consistent-type-specifier-style | import | Style (183): | - |
+| exports-last | import | Style (183): | - |
+| first | import | Style (183): | - |
+| group-exports | import | Style (183): | - |
+| no-anonymous-default-export | import | Style (183): | - |
+| no-duplicates | import | Style (183): | - |
+| no-mutable-exports | import | Style (183): | - |
+| no-named-default | import | Style (183): | - |
+| no-named-export | import | Style (183): | - |
+| no-namespace | import | Style (183): | - |
+| prefer-default-export | import | Style (183): | - |
+| consistent-test-it | jest | Style (183): | - |
+| max-expects | jest | Style (183): | - |
+| max-nested-describe | jest | Style (183): | - |
+| no-alias-methods | jest | Style (183): | - |
+| no-confusing-set-timeout | jest | Style (183): | - |
+| no-deprecated-functions | jest | Style (183): | - |
+| no-done-callback | jest | Style (183): | - |
+| no-duplicate-hooks | jest | Style (183): | - |
+| no-hooks | jest | Style (183): | - |
+| no-identical-title | jest | Style (183): | - |
+| no-interpolation-in-snapshots | jest | Style (183): | - |
+| no-jasmine-globals | jest | Style (183): | - |
+| no-large-snapshots | jest | Style (183): | - |
+| no-mocks-import | jest | Style (183): | - |
+| no-restricted-jest-methods | jest | Style (183): | - |
+| no-restricted-matchers | jest | Style (183): | - |
+| no-test-prefixes | jest | Style (183): | - |
+| no-test-return-statement | jest | Style (183): | - |
+| no-untyped-mock-factory | jest | Style (183): | - |
+| padding-around-test-blocks | jest | Style (183): | - |
+| prefer-called-with | jest | Style (183): | - |
+| prefer-comparison-matcher | jest | Style (183): | - |
+| prefer-each | jest | Style (183): | - |
+| prefer-equality-matcher | jest | Style (183): | - |
+| prefer-expect-resolves | jest | Style (183): | - |
+| prefer-hooks-in-order | jest | Style (183): | - |
+| prefer-hooks-on-top | jest | Style (183): | - |
+| prefer-jest-mocked | jest | Style (183): | - |
+| prefer-lowercase-title | jest | Style (183): | - |
+| prefer-mock-promise-shorthand | jest | Style (183): | - |
+| prefer-spy-on | jest | Style (183): | - |
+| prefer-strict-equal | jest | Style (183): | - |
+| prefer-to-be | jest | Style (183): | - |
+| prefer-to-contain | jest | Style (183): | - |
+| prefer-to-have-been-called | jest | Style (183): | - |
+| prefer-to-have-been-called-times | jest | Style (183): | - |
+| prefer-to-have-length | jest | Style (183): | - |
+| prefer-todo | jest | Style (183): | - |
+| require-hook | jest | Style (183): | - |
+| require-top-level-describe | jest | Style (183): | - |
+| global-require | node | Style (183): | - |
+| no-exports-assign | node | Style (183): | - |
+| avoid-new | promise | Style (183): | - |
+| no-nesting | promise | Style (183): | - |
+| no-return-wrap | promise | Style (183): | - |
+| param-names | promise | Style (183): | - |
+| prefer-await-to-callbacks | promise | Style (183): | - |
+| prefer-await-to-then | promise | Style (183): | - |
+| prefer-catch | promise | Style (183): | - |
+| jsx-boolean-value | react | Style (183): | - |
+| jsx-curly-brace-presence | react | Style (183): | - |
+| jsx-fragments | react | Style (183): | - |
+| jsx-handler-names | react | Style (183): | - |
+| jsx-max-depth | react | Style (183): | - |
+| jsx-pascal-case | react | Style (183): | - |
+| jsx-props-no-spreading | react | Style (183): | - |
+| no-redundant-should-component-update | react | Style (183): | - |
+| no-set-state | react | Style (183): | - |
+| prefer-es6-class | react | Style (183): | - |
+| self-closing-comp | react | Style (183): | - |
+| state-in-constructor | react | Style (183): | - |
+| adjacent-overload-signatures | typescript | Style (183): | - |
+| array-type | typescript | Style (183): | - |
+| ban-tslint-comment | typescript | Style (183): | - |
+| consistent-generic-constructors | typescript | Style (183): | - |
+| consistent-indexed-object-style | typescript | Style (183): | - |
+| consistent-type-definitions | typescript | Style (183): | - |
+| consistent-type-imports | typescript | Style (183): | - |
+| no-empty-interface | typescript | Style (183): | - |
+| no-inferrable-types | typescript | Style (183): | - |
+| prefer-for-of | typescript | Style (183): | - |
+| prefer-function-type | typescript | Style (183): | - |
+| prefer-namespace-keyword | typescript | Style (183): | - |
+| prefer-reduce-type-parameter | typescript | Style (183): | - |
+| prefer-return-this-type | typescript | Style (183): | - |
+| catch-error-name | unicorn | Style (183): | - |
+| consistent-date-clone | unicorn | Style (183): | - |
+| consistent-existence-index-check | unicorn | Style (183): | - |
+| empty-brace-spaces | unicorn | Style (183): | - |
+| error-message | unicorn | Style (183): | - |
+| filename-case | unicorn | Style (183): | Plugin: file-naming (STYLE-001) |
+| no-array-method-this-argument | unicorn | Style (183): | - |
+| no-await-expression-member | unicorn | Style (183): | - |
+| no-console-spaces | unicorn | Style (183): | - |
+| no-nested-ternary | unicorn | Style (183): | - |
+| no-null | unicorn | Style (183): | Plugin checks null usage (STYLE-020) |
+| no-unreadable-array-destructuring | unicorn | Style (183): | - |
+| no-useless-collection-argument | unicorn | Style (183): | - |
+| no-zero-fractions | unicorn | Style (183): | - |
+| number-literal-case | unicorn | Style (183): | - |
+| numeric-separators-style | unicorn | Style (183): | - |
+| prefer-array-index-of | unicorn | Style (183): | - |
+| prefer-bigint-literals | unicorn | Style (183): | - |
+| prefer-class-fields | unicorn | Style (183): | - |
+| prefer-classlist-toggle | unicorn | Style (183): | - |
+| prefer-default-parameters | unicorn | Style (183): | - |
+| prefer-dom-node-text-content | unicorn | Style (183): | - |
+| prefer-global-this | unicorn | Style (183): | - |
+| prefer-includes | unicorn | Style (183): | - |
+| prefer-keyboard-event-key | unicorn | Style (183): | - |
+| prefer-logical-operator-over-ternary | unicorn | Style (183): | - |
+| prefer-modern-dom-apis | unicorn | Style (183): | - |
+| prefer-negative-index | unicorn | Style (183): | - |
+| prefer-object-from-entries | unicorn | Style (183): | - |
+| prefer-optional-catch-binding | unicorn | Style (183): | - |
+| prefer-reflect-apply | unicorn | Style (183): | - |
+| prefer-response-static-json | unicorn | Style (183): | - |
+| prefer-spread | unicorn | Style (183): | - |
+| prefer-string-raw | unicorn | Style (183): | - |
+| prefer-string-trim-start-end | unicorn | Style (183): | - |
+| prefer-structured-clone | unicorn | Style (183): | - |
+| require-array-join-separator | unicorn | Style (183): | - |
+| require-module-attributes | unicorn | Style (183): | - |
+| switch-case-braces | unicorn | Style (183): | - |
+| text-encoding-identifier-case | unicorn | Style (183): | - |
+| throw-new-error | unicorn | Style (183): | - |
+| consistent-test-filename | vitest | Style (183): | - |
+| consistent-vitest-vi | vitest | Style (183): | - |
+| no-import-node-test | vitest | Style (183): | - |
+| prefer-called-times | vitest | Style (183): | - |
+| prefer-to-be-falsy | vitest | Style (183): | - |
+| prefer-to-be-object | vitest | Style (183): | - |
+| prefer-to-be-truthy | vitest | Style (183): | - |
+| define-emits-declaration | vue | Style (183): | - |
+| define-props-declaration | vue | Style (183): | - |
+| define-props-destructuring | vue | Style (183): | - |
+| require-typed-ref | vue | Style (183): | - |
+| getter-return | eslint | Nursery (9): | - |
+| no-misleading-character-class | eslint | Nursery (9): | - |
+| no-undef | eslint | Nursery (9): | - |
+| no-unreachable | eslint | Nursery (9): | - |
+| export | import | Nursery (9): | - |
+| named | import | Nursery (9): | - |
+| branches-sharing-code | oxc | Nursery (9): | - |
+| no-return-in-finally | promise | Nursery (9): | - |
+| require-render-return | react | Nursery (9): | - |
 
-## Details
+## Bun Checker Plugin Rules
 
-### 1. STYLE-001: File Naming (kebab-case)
-- **Plugin:** `file-naming`
-- **Logic:** Enforces kebab-case for filenames, ignoring reserved files (`index.ts`, etc.) and `.spec.ts`.
+These rules are implemented in `src/plugin.ts` to enforce project-specific requirements.
 
-### 2. STYLE-002: No Single Letter Identifiers
-- **Plugin:** `no-single-letter`
-- **Logic:** Bans 1-char identifiers except `i`, `j`, `k`, `_`, `T`.
-
-### 3. STYLE-003: No Abbreviations
-- **Plugin:** `no-abbreviation`
-- **Logic:** Flags short identifiers (2-3 chars) not in allowed list (`id`, `req`, `res`, `ctx`, `err`).
-
-### 4. STYLE-004: No Inline Object Types
-- **Plugin:** `no-inline-object`
-- **Logic:** Bans inline object types in function signatures/variables.
-
-### 5. STYLE-005: Type/Interface Separation
-- **Plugin:** `type-interface-separation`
-- **Logic:** Enforces types/interfaces to be defined in `types.ts`/`interfaces.ts`.
-
-### 6. STYLE-006: No explicit any
-- **Native:** Used `typescript/no-explicit-any`.
-
-### 7. STYLE-007: Explicit Return Type
-- **Plugin:** `explicit-return-type`
-- **Logic:** Requires return type annotation on function declarations.
-
-### 8. STYLE-009: Force Curly Block
-- **Plugin:** `force-curly-block`
-- **Logic:** Enforces curly braces for `if`/`else` blocks.
-
-### 9. STYLE-011: No Local Constants
-- **Plugin:** `no-local-constants`
-- **Logic:** Bans local `const` variables using `SCREAMING_SNAKE_CASE`.
-
-### 10. STYLE-012: Generic Naming
-- **Plugin:** `generic-naming`
-- **Logic:** Generic parameters must be `T` or PascalCase (e.g. `TInput`).
-
-### 11. STYLE-014: Shorthand Property
-- **Plugin:** `shorthand-property`
-- **Logic:** Enforces `{ a }` instead of `{ a: a }`.
-
-### 12. STYLE-015: Max Function Params
-- **Plugin:** `max-params`
-- **Logic:** Limit: 4.
-
-### 13. STYLE-018: No Bracket Notation
-- **Plugin:** `no-bracket-notation`
-- **Logic:** Enforces dot notation for valid identifiers.
-
-### 14. STYLE-019: Nullish Coalescing
-- **Plugin:** `nullish-coalescing`
-- **Logic:** Suggests `??` over `||`.
-
-### 15. STYLE-021: Enum Member PascalCase
-- **Plugin:** `enum-pascal-case`
-- **Logic:** Enforces PascalCase for enum members.
-
-### 16. STYLE-022: Repeated Literals
-- **Plugin:** `repeated-literals`
-- **Logic:** Flags string literals repeated 2+ times.
-
-### 17. STYLE-023: Restrict Spread
-- **Plugin:** `restrict-spread`
-- **Logic:** Warns on spread operator usage to encourage explicit copying.
-
-## Conclusion
-
-The `bun-checker-plugin` provides comprehensive coverage of the Style Guide, implementing rules that are either missing from `oxlint` or require specific logic (like file naming exclusions or semantic type separation). Where possible, native rules (`no-explicit-any`) are enabled.
+| Plugin Rule ID | Description | Style Guide |
+| :--- | :--- | :--- |
+| `file-naming` | Enforce kebab-case for files (excluding reserved) | STYLE-001 |
+| `no-single-letter` | Ban single letter identifiers (except i,j,k,_,T) | STYLE-002 |
+| `no-abbreviation` | Restrict abbreviations | STYLE-003 |
+| `no-inline-object` | Ban inline object types | STYLE-004 |
+| `type-interface-separation` | Enforce types/interfaces in dedicated files | STYLE-005 |
+| `explicit-return-type` | Require explicit return type on functions | STYLE-007 |
+| `force-curly-block` | Force curly braces for control flow | STYLE-009 |
+| `no-local-constants` | Ban local constants with UPPER_CASE | STYLE-011 |
+| `generic-naming` | Enforce T or PascalCase for generics | STYLE-012 |
+| `shorthand-property` | Enforce object shorthand | STYLE-014 |
+| `max-params` | Max 4 parameters | STYLE-015 |
+| `no-bracket-notation` | Enforce dot notation | STYLE-018 |
+| `nullish-coalescing` | Prefer ?? over || | STYLE-019 |
+| `enum-pascal-case` | Enforce PascalCase for enum members | STYLE-021 |
+| `repeated-literals` | Detect repeated string literals | STYLE-022 |
+| `restrict-spread` | Restrict spread operator usage | STYLE-023 |
