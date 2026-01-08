@@ -1,6 +1,11 @@
 # Rule Comparison: Oxlint vs Bun-Checker-Plugin
 
-This document lists ALL native oxlint rules and identifies overlaps with the `bun-checker-plugin` implementation of the Style Guide.
+This document lists ALL native oxlint rules and identifies functionality overlaps with the `bun-checker-plugin`.
+
+**Legend:**
+- `✅ DUPLICATE`: Functional equivalent exists natively in oxlint.
+- `⚠️ PARTIAL`: Similar rule exists but logic/defaults differ from Style Guide.
+- `-`: No direct overlap found.
 
 ## Oxlint Rules Analysis
 
@@ -274,11 +279,11 @@ This document lists ALL native oxlint rules and identifies overlaps with the `bu
 | no-danger | react | Restriction (81): | - |
 | no-unknown-property | react | Restriction (81): | - |
 | only-export-components | react | Restriction (81): | - |
-| explicit-function-return-type | typescript | Restriction (81): | Plugin: explicit-return-type (STYLE-007) |
+| explicit-function-return-type | typescript | Restriction (81): | ✅ DUPLICATE (Native Preferred) |
 | explicit-module-boundary-types | typescript | Restriction (81): | - |
 | no-dynamic-delete | typescript | Restriction (81): | - |
 | no-empty-object-type | typescript | Restriction (81): | - |
-| no-explicit-any | typescript | Restriction (81): | Native Rule Used (STYLE-006) |
+| no-explicit-any | typescript | Restriction (81): | ✅ DUPLICATE (Native Preferred) |
 | no-import-type-side-effects | typescript | Restriction (81): | - |
 | no-namespace | typescript | Restriction (81): | - |
 | no-non-null-asserted-nullish-coalescing | typescript | Restriction (81): | - |
@@ -413,7 +418,7 @@ This document lists ALL native oxlint rules and identifies overlaps with the `bu
 | only-throw-error | typescript | Pedantic (113): | - |
 | prefer-enum-initializers | typescript | Pedantic (113): | - |
 | prefer-includes | typescript | Pedantic (113): | - |
-| prefer-nullish-coalescing | typescript | Pedantic (113): | Plugin: nullish-coalescing (STYLE-019) / Native exists |
+| prefer-nullish-coalescing | typescript | Pedantic (113): | ✅ DUPLICATE (Native Preferred) |
 | prefer-promise-reject-errors | typescript | Pedantic (113): | - |
 | prefer-ts-expect-error | typescript | Pedantic (113): | - |
 | related-getter-setter-pairs | typescript | Pedantic (113): | - |
@@ -468,16 +473,16 @@ This document lists ALL native oxlint rules and identifies overlaps with the `bu
 | require-number-to-fixed-digits-argument | unicorn | Pedantic (113): | - |
 | arrow-body-style | eslint | Style (183): | - |
 | capitalized-comments | eslint | Style (183): | - |
-| curly | eslint | Style (183): | Plugin: force-curly-block (STYLE-009) / Native exists |
+| curly | eslint | Style (183): | ✅ DUPLICATE (Native Preferred) |
 | default-case-last | eslint | Style (183): | - |
 | default-param-last | eslint | Style (183): | - |
 | func-names | eslint | Style (183): | - |
 | func-style | eslint | Style (183): | - |
 | grouped-accessor-pairs | eslint | Style (183): | - |
 | guard-for-in | eslint | Style (183): | - |
-| id-length | eslint | Style (183): | Plugin: no-single-letter (STYLE-002) |
+| id-length | eslint | Style (183): | ⚠️ PARTIAL (Native requires config, Custom hardcodes "i,j,k,_,T") |
 | init-declarations | eslint | Style (183): | - |
-| max-params | eslint | Style (183): | Native Rule Used / Plugin: max-params (STYLE-015) |
+| max-params | eslint | Style (183): | ✅ DUPLICATE (Native Preferred) |
 | max-statements | eslint | Style (183): | - |
 | new-cap | eslint | Style (183): | - |
 | no-continue | eslint | Style (183): | - |
@@ -602,12 +607,12 @@ This document lists ALL native oxlint rules and identifies overlaps with the `bu
 | consistent-existence-index-check | unicorn | Style (183): | - |
 | empty-brace-spaces | unicorn | Style (183): | - |
 | error-message | unicorn | Style (183): | - |
-| filename-case | unicorn | Style (183): | Plugin: file-naming (STYLE-001) |
+| filename-case | unicorn | Style (183): | ⚠️ PARTIAL (Custom logic has specific exclusions) |
 | no-array-method-this-argument | unicorn | Style (183): | - |
 | no-await-expression-member | unicorn | Style (183): | - |
 | no-console-spaces | unicorn | Style (183): | - |
 | no-nested-ternary | unicorn | Style (183): | - |
-| no-null | unicorn | Style (183): | Plugin checks null usage (STYLE-020) |
+| no-null | unicorn | Style (183): | ❌ DIFFERENT (Custom bans null except specific cases, Native bans all null) |
 | no-unreadable-array-destructuring | unicorn | Style (183): | - |
 | no-useless-collection-argument | unicorn | Style (183): | - |
 | no-zero-fractions | unicorn | Style (183): | - |
@@ -661,23 +666,23 @@ This document lists ALL native oxlint rules and identifies overlaps with the `bu
 
 ## Bun Checker Plugin Rules
 
-These rules are implemented in `src/plugin.ts` to enforce project-specific requirements.
+These rules are implemented in `src/plugin.ts` to enforce project-specific requirements that are either missing from oxlint or require strict, zero-config logic.
 
-| Plugin Rule ID | Description | Style Guide |
+| Plugin Rule ID | Description | Overlap Status |
 | :--- | :--- | :--- |
-| `file-naming` | Enforce kebab-case for files (excluding reserved) | STYLE-001 |
-| `no-single-letter` | Ban single letter identifiers (except i,j,k,_,T) | STYLE-002 |
-| `no-abbreviation` | Restrict abbreviations | STYLE-003 |
-| `no-inline-object` | Ban inline object types | STYLE-004 |
-| `type-interface-separation` | Enforce types/interfaces in dedicated files | STYLE-005 |
-| `explicit-return-type` | Require explicit return type on functions | STYLE-007 |
-| `force-curly-block` | Force curly braces for control flow | STYLE-009 |
-| `no-local-constants` | Ban local constants with UPPER_CASE | STYLE-011 |
-| `generic-naming` | Enforce T or PascalCase for generics | STYLE-012 |
-| `shorthand-property` | Enforce object shorthand | STYLE-014 |
-| `max-params` | Max 4 parameters | STYLE-015 |
-| `no-bracket-notation` | Enforce dot notation | STYLE-018 |
-| `nullish-coalescing` | Prefer ?? over || | STYLE-019 |
-| `enum-pascal-case` | Enforce PascalCase for enum members | STYLE-021 |
-| `repeated-literals` | Detect repeated string literals | STYLE-022 |
-| `restrict-spread` | Restrict spread operator usage | STYLE-023 |
+| `file-naming` | Enforce kebab-case for files (excluding reserved) | ⚠️ Partial (filename-case) |
+| `no-single-letter` | Ban single letter identifiers (except i,j,k,_,T) | ⚠️ Partial (id-length) |
+| `no-abbreviation` | Restrict abbreviations | - |
+| `no-inline-object` | Ban inline object types | - |
+| `type-interface-separation` | Enforce types/interfaces in dedicated files | - |
+| `explicit-return-type` | Require explicit return type on functions | ✅ Duplicate (explicit-function-return-type) |
+| `force-curly-block` | Force curly braces for control flow | ✅ Duplicate (curly) |
+| `no-local-constants` | Ban local constants with UPPER_CASE | - |
+| `generic-naming` | Enforce T or PascalCase for generics | ⚠️ Partial (naming-convention) |
+| `shorthand-property` | Enforce object shorthand | ✅ Duplicate (object-shorthand) |
+| `max-params` | Max 4 parameters | ✅ Duplicate (max-params) |
+| `no-bracket-notation` | Enforce dot notation | ✅ Duplicate (dot-notation) |
+| `nullish-coalescing` | Prefer ?? over || | ✅ Duplicate (prefer-nullish-coalescing) |
+| `enum-pascal-case` | Enforce PascalCase for enum members | ⚠️ Partial (naming-convention) |
+| `repeated-literals` | Detect repeated string literals | - |
+| `restrict-spread` | Restrict spread operator usage | - |
