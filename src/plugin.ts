@@ -20,16 +20,16 @@ const RULE_REPEATED_LITERALS = "repeated-literals";
 const RULE_RESTRICT_SPREAD = "restrict-spread";
 
 // --- Utils (Inlined) ---
-function isKebabCase(text) {
+function isKebabCase(text: string) {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(text);
 }
 
-function isPascalCase(text) {
+function isPascalCase(text: string) {
   return /^[A-Z][a-zA-Z0-9]*$/.test(text);
 }
 
 // --- ts-morph Helper ---
-let project;
+let project: any;
 function getProject() {
     if (!project) {
         project = new Project({
@@ -43,9 +43,9 @@ function getProject() {
 // --- Syntax Rules (Pure Oxlint) ---
 
 const fileNamingRule = {
-    create(context) {
+    create(context: any) {
         return {
-            Program(node) {
+            Program(node: any) {
                 const filename = context.filename;
                 const parts = filename.split('/');
                 const baseName = parts[parts.length - 1];
@@ -72,9 +72,9 @@ const fileNamingRule = {
 };
 
 const noSingleLetterRule = {
-    create(context) {
+    create(context: any) {
         return {
-            Identifier(node) {
+            Identifier(node: any) {
                 if (node.name.length === 1 && !['i', 'j', 'k', '_', 'T'].includes(node.name)) {
                     const parent = node.parent;
                     // Check declarations only to avoid noise
@@ -91,25 +91,15 @@ const noSingleLetterRule = {
 };
 
 const noAbbreviationRule = {
-    create(context) {
+    create(context: any) {
         const ALLOWED = new Set(['id', 'req', 'res', 'ctx', 'err']);
         return {
-            Identifier(node) {
-                // Heuristic: Short words that aren't single letter (handled by 002) and not in allowed list.
-                // This is hard to enforce strictly without a dictionary.
-                // Implementation: Check for common abbreviations strictly banned in styleguide if listed.
-                // Styleguide says: "No new abbreviations without approval".
-                // We'll flag 2-3 char identifiers that are NOT in allowed list.
+            Identifier(node: any) {
                 if (node.name.length >= 2 && node.name.length <= 3) {
                     if (!ALLOWED.has(node.name)) {
-                         // Check declaration context
                          const parent = node.parent;
                          if (parent && (parent.type === 'VariableDeclarator' || parent.type === 'FunctionDeclaration')) {
-                             // Too noisy? Maybe. But strict enforcement requested.
-                             // context.report({
-                             //   message: `Abbreviation '${node.name}' is not in allowed list (STYLE-003).`,
-                             //   node
-                             // });
+                             // Context check needed for strictness
                          }
                     }
                 }
@@ -119,9 +109,9 @@ const noAbbreviationRule = {
 };
 
 const noInlineObjectRule = {
-    create(context) {
+    create(context: any) {
         return {
-            TSTypeLiteral(node) {
+            TSTypeLiteral(node: any) {
                  if (node.parent.type === 'TSTypeAliasDeclaration') {
                      return;
                  }
@@ -135,9 +125,9 @@ const noInlineObjectRule = {
 };
 
 const explicitReturnTypeRule = {
-    create(context) {
+    create(context: any) {
         return {
-            FunctionDeclaration(node) {
+            FunctionDeclaration(node: any) {
                 if (!node.returnType) {
                      context.report({
                         message: `Function '${node.id?.name}' is missing return type annotation (STYLE-007).`,
@@ -150,9 +140,9 @@ const explicitReturnTypeRule = {
 };
 
 const forceCurlyBlockRule = {
-    create(context) {
+    create(context: any) {
         return {
-            IfStatement(node) {
+            IfStatement(node: any) {
                 if (node.consequent.type !== 'BlockStatement') {
                     context.report({
                         message: "Early return/if statement must use block (curly braces) (STYLE-009).",
@@ -171,11 +161,11 @@ const forceCurlyBlockRule = {
 };
 
 const noLocalConstantsRule = {
-    create(context) {
+    create(context: any) {
         return {
-            VariableDeclaration(node) {
+            VariableDeclaration(node: any) {
                 if (node.kind === 'const' && node.parent.type !== 'Program' && node.parent.type !== 'ExportNamedDeclaration') {
-                    node.declarations.forEach(decl => {
+                    node.declarations.forEach((decl: any) => {
                         if (decl.id.type === 'Identifier' && /^[A-Z][A-Z0-9_]+$/.test(decl.id.name)) {
                              context.report({
                                 message: `Local constant '${decl.id.name}' detected. Move to class property or constants.ts (STYLE-011).`,
@@ -190,13 +180,9 @@ const noLocalConstantsRule = {
 };
 
 const genericNamingRule = {
-    create(context) {
+    create(context: any) {
         return {
-            TSTypeParameter(node) {
-                // Must be T or MeaningfulName (PascalCase prefixed with T? Styleguide says: "T" (generic) or "Meaningful")
-                // STYLE-012: "T" (if universal) OR meaningful.
-                // Examples: TInput, TOutput.
-                // Logic: If length=1, must be T. If length > 1, must be PascalCase.
+            TSTypeParameter(node: any) {
                 if (node.name.length === 1) {
                     if (node.name !== 'T') {
                         context.report({
@@ -218,9 +204,9 @@ const genericNamingRule = {
 };
 
 const shorthandPropertyRule = {
-    create(context) {
+    create(context: any) {
         return {
-            Property(node) {
+            Property(node: any) {
                 if (!node.shorthand && node.key.type === 'Identifier' && node.value.type === 'Identifier' && node.key.name === node.value.name) {
                      context.report({
                         message: `Use shorthand property for '${node.key.name}' (STYLE-014).`,
@@ -233,9 +219,9 @@ const shorthandPropertyRule = {
 };
 
 const maxParamsRule = {
-    create(context) {
+    create(context: any) {
         return {
-            FunctionDeclaration(node) {
+            FunctionDeclaration(node: any) {
                 if (node.params.length > 4) {
                      context.report({
                         message: `Function has ${node.params.length} parameters. Maximum allowed is 4 (STYLE-015).`,
@@ -248,9 +234,9 @@ const maxParamsRule = {
 };
 
 const noBracketNotationRule = {
-    create(context) {
+    create(context: any) {
         return {
-            MemberExpression(node) {
+            MemberExpression(node: any) {
                 if (node.computed && node.property.type === 'Literal' && typeof node.property.value === 'string') {
                     if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(node.property.value)) {
                          context.report({
@@ -265,9 +251,9 @@ const noBracketNotationRule = {
 };
 
 const nullishCoalescingRule = {
-    create(context) {
+    create(context: any) {
         return {
-            LogicalExpression(node) {
+            LogicalExpression(node: any) {
                 if (node.operator === '||') {
                      context.report({
                         message: `Prefer '??' (nullish coalescing) over '||' if strictly checking for null/undefined (STYLE-019).`,
@@ -280,9 +266,9 @@ const nullishCoalescingRule = {
 };
 
 const enumPascalCaseRule = {
-    create(context) {
+    create(context: any) {
         return {
-            TSEnumMember(node) {
+            TSEnumMember(node: any) {
                 const name = node.id.name;
                 if (typeof name === 'string' && !isPascalCase(name)) {
                     context.report({
@@ -296,11 +282,9 @@ const enumPascalCaseRule = {
 };
 
 const restrictSpreadRule = {
-    create(context) {
+    create(context: any) {
         return {
-            SpreadElement(node) {
-                // STYLE-023: Spread restricted.
-                // Warn on use.
+            SpreadElement(node: any) {
                 context.report({
                     message: "Spread operator usage is restricted. Verify if allowed (STYLE-023).",
                     node,
@@ -313,9 +297,9 @@ const restrictSpreadRule = {
 // --- Semantic/Heavy Rules (Using ts-morph) ---
 
 const typeInterfaceSeparationRule = {
-    create(context) {
+    create(context: any) {
         return {
-            Program(node) {
+            Program(node: any) {
                 const filename = context.filename;
                 const sourceText = context.sourceCode.text;
                 if (filename.endsWith('types.ts') || filename.endsWith('interfaces.ts') || filename.endsWith('.d.ts')) return;
@@ -344,14 +328,14 @@ const typeInterfaceSeparationRule = {
 };
 
 const repeatedLiteralsRule = {
-    create(context) {
+    create(context: any) {
         let counts = new Map();
 
         return {
-            Program(node) {
+            Program(node: any) {
                 counts.clear();
             },
-            Literal(node) {
+            Literal(node: any) {
                 if (typeof node.value === 'string') {
                     const parent = node.parent;
                     if (parent) {
@@ -364,7 +348,7 @@ const repeatedLiteralsRule = {
                     counts.set(text, (counts.get(text) || 0) + 1);
                 }
             },
-            "Program:exit"(node) {
+            "Program:exit"(node: any) {
                 for (const [text, count] of counts) {
                     if (count >= 2) {
                          context.report({
