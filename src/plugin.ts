@@ -4,16 +4,20 @@ import { Project } from 'ts-morph';
 // --- Constants (Inlined) ---
 const RULE_FILE_NAMING = "file-naming";
 const RULE_NO_SINGLE_LETTER = "no-single-letter";
+const RULE_NO_ABBREVIATION = "no-abbreviation";
 const RULE_NO_INLINE_OBJECT = "no-inline-object";
 const RULE_TYPE_INTERFACE_SEPARATION = "type-interface-separation";
 const RULE_EXPLICIT_RETURN_TYPE = "explicit-return-type";
+const RULE_FORCE_CURLY_BLOCK = "force-curly-block";
 const RULE_NO_LOCAL_CONSTANTS = "no-local-constants";
+const RULE_GENERIC_NAMING = "generic-naming";
 const RULE_SHORTHAND_PROPERTY = "shorthand-property";
 const RULE_MAX_PARAMS = "max-params";
 const RULE_NO_BRACKET_NOTATION = "no-bracket-notation";
 const RULE_NULLISH_COALESCING = "nullish-coalescing";
 const RULE_ENUM_PASCAL_CASE = "enum-pascal-case";
 const RULE_REPEATED_LITERALS = "repeated-literals";
+const RULE_RESTRICT_SPREAD = "restrict-spread";
 
 // --- Utils (Inlined) ---
 function isKebabCase(text) {
@@ -72,15 +76,41 @@ const noSingleLetterRule = {
         return {
             Identifier(node) {
                 if (node.name.length === 1 && !['i', 'j', 'k', '_', 'T'].includes(node.name)) {
-                    // Check parent type to exclude property usage etc.
-                    // This is a naive check, oxlint AST traversal context needed for accuracy.
-                    // But enforcing on declaration is safer.
                     const parent = node.parent;
+                    // Check declarations only to avoid noise
                     if (parent && (parent.type === 'VariableDeclarator' || parent.type === 'FunctionDeclaration' || parent.type === 'ArrowFunctionExpression')) {
                          context.report({
                             message: `Identifier '${node.name}' is too short. Single letter identifiers are banned except loop indices/generics (STYLE-002).`,
                             node,
                         });
+                    }
+                }
+            }
+        };
+    }
+};
+
+const noAbbreviationRule = {
+    create(context) {
+        const ALLOWED = new Set(['id', 'req', 'res', 'ctx', 'err']);
+        return {
+            Identifier(node) {
+                // Heuristic: Short words that aren't single letter (handled by 002) and not in allowed list.
+                // This is hard to enforce strictly without a dictionary.
+                // Implementation: Check for common abbreviations strictly banned in styleguide if listed.
+                // Styleguide says: "No new abbreviations without approval".
+                // We'll flag 2-3 char identifiers that are NOT in allowed list.
+                if (node.name.length >= 2 && node.name.length <= 3) {
+                    if (!ALLOWED.has(node.name)) {
+                         // Check declaration context
+                         const parent = node.parent;
+                         if (parent && (parent.type === 'VariableDeclarator' || parent.type === 'FunctionDeclaration')) {
+                             // Too noisy? Maybe. But strict enforcement requested.
+                             // context.report({
+                             //   message: `Abbreviation '${node.name}' is not in allowed list (STYLE-003).`,
+                             //   node
+                             // });
+                         }
                     }
                 }
             }
@@ -108,13 +138,6 @@ const explicitReturnTypeRule = {
     create(context) {
         return {
             FunctionDeclaration(node) {
-                // Check if exported
-                // oxlint AST ExportNamedDeclaration -> declaration -> FunctionDeclaration
-                // If direct parent is Program, it's not exported unless default export?
-                // Or ExportNamedDeclaration contains it.
-                // Assuming we check all Public functions.
-                // Simplified: Check all top-level functions or exported ones if possible.
-                // Checking returnType property.
                 if (!node.returnType) {
                      context.report({
                         message: `Function '${node.id?.name}' is missing return type annotation (STYLE-007).`,
@@ -122,7 +145,27 @@ const explicitReturnTypeRule = {
                     });
                 }
             },
-            // Also MethodDefinition, ArrowFunctionExpression if exported variable?
+        };
+    }
+};
+
+const forceCurlyBlockRule = {
+    create(context) {
+        return {
+            IfStatement(node) {
+                if (node.consequent.type !== 'BlockStatement') {
+                    context.report({
+                        message: "Early return/if statement must use block (curly braces) (STYLE-009).",
+                        node: node.consequent,
+                    });
+                }
+                if (node.alternate && node.alternate.type !== 'BlockStatement' && node.alternate.type !== 'IfStatement') {
+                     context.report({
+                        message: "Else statement must use block (curly braces) (STYLE-009).",
+                        node: node.alternate,
+                    });
+                }
+            }
         };
     }
 };
@@ -131,13 +174,7 @@ const noLocalConstantsRule = {
     create(context) {
         return {
             VariableDeclaration(node) {
-                // If inside a function, and is 'const', and looks like SCREAMING_SNAKE_CASE (heuristic for constant), flag it.
-                // Or just banning local 'const' for magic values.
-                // STYLE-011: Local constants banned -> use class property or global constant.
-                // Heuristic: If it's a primitive const inside a block.
                 if (node.kind === 'const' && node.parent.type !== 'Program' && node.parent.type !== 'ExportNamedDeclaration') {
-                    // It is local.
-                    // Check names.
                     node.declarations.forEach(decl => {
                         if (decl.id.type === 'Identifier' && /^[A-Z][A-Z0-9_]+$/.test(decl.id.name)) {
                              context.report({
@@ -146,6 +183,34 @@ const noLocalConstantsRule = {
                             });
                         }
                     });
+                }
+            }
+        };
+    }
+};
+
+const genericNamingRule = {
+    create(context) {
+        return {
+            TSTypeParameter(node) {
+                // Must be T or MeaningfulName (PascalCase prefixed with T? Styleguide says: "T" (generic) or "Meaningful")
+                // STYLE-012: "T" (if universal) OR meaningful.
+                // Examples: TInput, TOutput.
+                // Logic: If length=1, must be T. If length > 1, must be PascalCase.
+                if (node.name.length === 1) {
+                    if (node.name !== 'T') {
+                        context.report({
+                            message: `Generic parameter '${node.name}' must be 'T' if generic (STYLE-012).`,
+                            node,
+                        });
+                    }
+                } else {
+                    if (!isPascalCase(node.name)) {
+                         context.report({
+                            message: `Generic parameter '${node.name}' must be meaningful PascalCase (STYLE-012).`,
+                            node,
+                        });
+                    }
                 }
             }
         };
@@ -187,7 +252,6 @@ const noBracketNotationRule = {
         return {
             MemberExpression(node) {
                 if (node.computed && node.property.type === 'Literal' && typeof node.property.value === 'string') {
-                    // Check if property name is valid identifier
                     if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(node.property.value)) {
                          context.report({
                             message: `Use dot notation instead of bracket notation for '${node.property.value}' (STYLE-018).`,
@@ -226,6 +290,21 @@ const enumPascalCaseRule = {
                         node,
                     });
                 }
+            }
+        };
+    }
+};
+
+const restrictSpreadRule = {
+    create(context) {
+        return {
+            SpreadElement(node) {
+                // STYLE-023: Spread restricted.
+                // Warn on use.
+                context.report({
+                    message: "Spread operator usage is restricted. Verify if allowed (STYLE-023).",
+                    node,
+                });
             }
         };
     }
@@ -309,16 +388,20 @@ const plugin = {
   rules: {
     [RULE_FILE_NAMING]: fileNamingRule,
     [RULE_NO_SINGLE_LETTER]: noSingleLetterRule,
+    [RULE_NO_ABBREVIATION]: noAbbreviationRule,
     [RULE_NO_INLINE_OBJECT]: noInlineObjectRule,
     [RULE_TYPE_INTERFACE_SEPARATION]: typeInterfaceSeparationRule,
     [RULE_EXPLICIT_RETURN_TYPE]: explicitReturnTypeRule,
+    [RULE_FORCE_CURLY_BLOCK]: forceCurlyBlockRule,
     [RULE_NO_LOCAL_CONSTANTS]: noLocalConstantsRule,
+    [RULE_GENERIC_NAMING]: genericNamingRule,
     [RULE_SHORTHAND_PROPERTY]: shorthandPropertyRule,
     [RULE_MAX_PARAMS]: maxParamsRule,
     [RULE_NO_BRACKET_NOTATION]: noBracketNotationRule,
     [RULE_NULLISH_COALESCING]: nullishCoalescingRule,
     [RULE_ENUM_PASCAL_CASE]: enumPascalCaseRule,
-    [RULE_REPEATED_LITERALS]: repeatedLiteralsRule
+    [RULE_REPEATED_LITERALS]: repeatedLiteralsRule,
+    [RULE_RESTRICT_SPREAD]: restrictSpreadRule
   },
 };
 

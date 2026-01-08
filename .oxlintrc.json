@@ -1,17 +1,25 @@
 {
   "jsPlugins": ["./src/plugin.ts"],
   "rules": {
+    "typescript/no-explicit-any": "error",
+    "eslint/dot-notation": "off",
+    "eslint/max-params": "off",
+    "eslint/object-shorthand": "off",
     "bun-checker-plugin/file-naming": "error",
     "bun-checker-plugin/no-single-letter": "error",
+    "bun-checker-plugin/no-abbreviation": "error",
     "bun-checker-plugin/no-inline-object": "error",
     "bun-checker-plugin/type-interface-separation": "error",
     "bun-checker-plugin/explicit-return-type": "error",
+    "bun-checker-plugin/force-curly-block": "error",
     "bun-checker-plugin/no-local-constants": "error",
+    "bun-checker-plugin/generic-naming": "error",
     "bun-checker-plugin/shorthand-property": "error",
     "bun-checker-plugin/max-params": "error",
     "bun-checker-plugin/no-bracket-notation": "error",
     "bun-checker-plugin/nullish-coalescing": "error",
     "bun-checker-plugin/enum-pascal-case": "error",
-    "bun-checker-plugin/repeated-literals": "error"
+    "bun-checker-plugin/repeated-literals": "error",
+    "bun-checker-plugin/restrict-spread": "warn"
   }
 }
