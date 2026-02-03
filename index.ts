@@ -1,11 +1,21 @@
 import { runCli } from './src/adapters/cli/entry';
+import { runInstall } from './src/adapters/cli/install';
 import { runMcp } from './src/adapters/mcp/entry';
+
+import { appendFirebatLog } from './src/infra/logging';
+import { resolveFirebatRootFromCwd } from './src/root-resolver';
 
 const main = async (): Promise<void> => {
 	const argv = Bun.argv.slice(2);
 	const subcommand = argv[0];
 
 	try {
+		if (subcommand === 'install') {
+			await runInstall();
+
+			return;
+		}
+
 		if (subcommand === 'mcp') {
 			await runMcp();
 
@@ -17,12 +27,14 @@ const main = async (): Promise<void> => {
 
 		process.exit(exitCode);
 	} catch (error) {
-		// MCP process constraints: do not write to stdout.
-		// When MCP startup fails, persist diagnostics to a file so callers can inspect.
-		const message = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error);
+		const message =
+			error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error);
+		const relativeLogPath = subcommand === 'mcp' ? '.firebat/mcp-error.log' : '.firebat/cli-error.log';
 
 		try {
-			await Bun.write('./.firebat-mcp-error.log', `[${new Date().toISOString()}]\n${message}\n`);
+			const rootAbs = await resolveFirebatRootFromCwd();
+
+			await appendFirebatLog(rootAbs, relativeLogPath, message);
 		} catch {
 			// ignore
 		}

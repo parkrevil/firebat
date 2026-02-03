@@ -74,7 +74,6 @@ const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutp
   }
 
   try {
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     return { memoryKey: input.memoryKey, value: JSON.parse(rec.payloadJson) as JsonValue };
   } catch {
     return { memoryKey: input.memoryKey, value: rec.payloadJson };

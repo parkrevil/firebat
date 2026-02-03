@@ -1,5 +1,3 @@
-/* oxlint-disable firebat/no-unknown */
-
 import type { Node } from 'oxc-parser';
 
 import type { SourceSpan } from '../types';

@@ -21,7 +21,6 @@ const createInMemoryArtifactRepository = (): ArtifactRepository => {
         let parsed: T;
 
         try {
-          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           parsed = JSON.parse(row.payloadJson) as T;
         } catch {
           return Promise.resolve(null);

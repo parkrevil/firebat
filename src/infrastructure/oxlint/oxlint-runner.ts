@@ -1,8 +1,8 @@
-interface JsonObject {
-  readonly [k: string]: JsonValue;
-}
+import * as path from 'node:path';
 
-type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+
+import * as z from 'zod';
 
 interface OxlintDiagnostic {
   readonly filePath?: string;
@@ -30,48 +30,90 @@ interface RunOxlintInput {
 
 const splitCommand = (value: string): string[] => value.split(/\s+/).filter(Boolean);
 
-const asString = (value: JsonValue | undefined): string | undefined => (typeof value === 'string' ? value : undefined);
+const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
+  const ctx = await resolveRuntimeContextFromCwd();
+  const configured = (ctx.config.oxlintCommand ?? '').trim();
 
-const asNumber = (value: JsonValue | undefined): number | undefined => (typeof value === 'number' ? value : undefined);
-
-const isObject = (value: JsonValue | undefined): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isArray = (value: JsonValue | undefined): value is ReadonlyArray<JsonValue> => Array.isArray(value);
-
-const getProp = (obj: JsonObject, key: string): JsonValue | undefined => obj[key];
-
-const normalizeDiagnosticsFromJson = (value: JsonValue): ReadonlyArray<OxlintDiagnostic> => {
-  if (!isObject(value) && !isArray(value)) {
-    return [];
+  if (configured.length > 0) {
+    return splitCommand(configured);
   }
 
-  const diagnosticsProp = isObject(value) ? getProp(value, 'diagnostics') : undefined;
-  const rawList: ReadonlyArray<JsonValue> = isArray(value) ? value : isArray(diagnosticsProp) ? diagnosticsProp : [];
+  const candidates = [
+    // project-local
+    path.resolve(process.cwd(), 'node_modules', '.bin', 'oxlint'),
+
+    // firebat package-local (dist/* sibling to node_modules/*)
+    path.resolve(import.meta.dir, '../../../node_modules', '.bin', 'oxlint'),
+    path.resolve(import.meta.dir, '../../node_modules', '.bin', 'oxlint'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const file = Bun.file(candidate);
+
+      if (await file.exists()) {
+        return [candidate];
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof Bun.which === 'function') {
+    const resolved = Bun.which('oxlint');
+
+    if (resolved !== null && resolved.length > 0) {
+      return [resolved];
+    }
+  }
+
+  return null;
+};
+
+const SeveritySchema = z.enum(['error', 'warning', 'info']);
+const OxlintDiagnosticSchema = z
+  .object({
+    filePath: z.string().optional(),
+    path: z.string().optional(),
+    file: z.string().optional(),
+    filename: z.string().optional(),
+    message: z.string().optional(),
+    text: z.string().optional(),
+    code: z.string().optional(),
+    ruleId: z.string().optional(),
+    rule: z.string().optional(),
+    severity: SeveritySchema.optional(),
+    level: SeveritySchema.optional(),
+    line: z.number().optional(),
+    row: z.number().optional(),
+    startLine: z.number().optional(),
+    column: z.number().optional(),
+    col: z.number().optional(),
+    startColumn: z.number().optional(),
+  })
+  .loose();
+const OxlintOutputSchema = z.union([
+  z.array(OxlintDiagnosticSchema),
+  z.looseObject({ diagnostics: z.array(OxlintDiagnosticSchema) }),
+]);
+
+type OxlintOutput = z.infer<typeof OxlintOutputSchema>;
+
+const normalizeDiagnosticsFromParsed = (value: OxlintOutput): ReadonlyArray<OxlintDiagnostic> => {
+  const rawList = Array.isArray(value) ? value : value.diagnostics;
   const out: OxlintDiagnostic[] = [];
 
   for (const item of rawList) {
-    if (!isObject(item)) {
-      continue;
-    }
-
-    const message = asString(getProp(item, 'message')) ?? asString(getProp(item, 'text')) ?? 'oxlint diagnostic';
-    const code =
-      asString(getProp(item, 'code')) ?? asString(getProp(item, 'ruleId')) ?? asString(getProp(item, 'rule'));
-    const severityRaw = asString(getProp(item, 'severity')) ?? asString(getProp(item, 'level'));
-    const severity: OxlintDiagnostic['severity'] =
-      severityRaw === 'error' || severityRaw === 'warning' || severityRaw === 'info' ? severityRaw : 'warning';
-    const filePath =
-      asString(getProp(item, 'filePath')) ??
-      asString(getProp(item, 'path')) ??
-      asString(getProp(item, 'file')) ??
-      asString(getProp(item, 'filename'));
-    const line = asNumber(getProp(item, 'line')) ?? asNumber(getProp(item, 'row')) ?? asNumber(getProp(item, 'startLine'));
-    const column =
-      asNumber(getProp(item, 'column')) ?? asNumber(getProp(item, 'col')) ?? asNumber(getProp(item, 'startColumn'));
-    const base: OxlintDiagnostic = { message, severity };
+    const message = item.message ?? item.text ?? 'oxlint diagnostic';
+    const code = item.code ?? item.ruleId ?? item.rule;
+    const severityRaw = item.severity ?? item.level;
+    const severity: OxlintDiagnostic['severity'] = severityRaw ?? 'warning';
+    const filePath = item.filePath ?? item.path ?? item.file ?? item.filename;
+    const line = item.line ?? item.row ?? item.startLine;
+    const column = item.column ?? item.col ?? item.startColumn;
     const normalized: OxlintDiagnostic = {
-      ...base,
+      message,
+      severity,
       ...(filePath !== undefined ? { filePath } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(line !== undefined ? { line } : {}),
@@ -85,17 +127,16 @@ const normalizeDiagnosticsFromJson = (value: JsonValue): ReadonlyArray<OxlintDia
 };
 
 const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
-  const cmdRaw = (process.env.FIREBAT_OXLINT_CMD ?? '').trim();
+  const cmd = await tryResolveOxlintCommand();
 
-  if (cmdRaw.length === 0) {
+  if (!cmd || cmd.length === 0) {
     return {
       ok: false,
       tool: 'oxlint',
-      error: 'oxlint is not configured. Set FIREBAT_OXLINT_CMD (e.g. "bunx -y oxlint") to enable lint tool.',
+      error: 'oxlint is not available. Install it (or use a firebat build that bundles it), or configure .firebat/config.json (oxlintCommand) to enable the lint tool.',
     };
   }
 
-  const cmd = splitCommand(cmdRaw);
   const args: string[] = [];
 
   if (input.configPath !== undefined && input.configPath.trim().length > 0) {
@@ -127,11 +168,13 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
 
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      const parsed = JSON.parse(trimmed) as JsonValue;
-      const diagnostics = normalizeDiagnosticsFromJson(parsed);
+      const parsed = OxlintOutputSchema.safeParse(JSON.parse(trimmed));
 
-      return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics };
+      if (parsed.success) {
+        const diagnostics = normalizeDiagnosticsFromParsed(parsed.data);
+
+        return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics };
+      }
     } catch {
       // fallthrough
     }

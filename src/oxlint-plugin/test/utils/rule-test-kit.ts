@@ -10,7 +10,7 @@ import type {
   SourceCode,
   SourceToken,
   Variable,
-} from '../../src/types';
+} from '../../types';
 
 interface RuleContextExtras {
   filename?: string;

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+#bunx knip
+#bunx depcruise -c .dependency-cruiser.cjs index.ts src

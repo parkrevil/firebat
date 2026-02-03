@@ -21,7 +21,6 @@ const createSqliteCacheRepository = (): CacheRepository => {
       }
 
       try {
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         const parsed = JSON.parse(row.reportJson) as FirebatReport;
 
         return parsed;

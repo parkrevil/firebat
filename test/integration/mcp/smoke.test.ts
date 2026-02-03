@@ -1,6 +1,6 @@
-/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, firebat/no-any, firebat/no-inline-object-type, firebat/no-unknown, firebat/padding-line-between-statements */
-
 import * as path from 'node:path';
+import * as os from 'node:os';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
 import { expect, test } from 'bun:test';
 
@@ -49,11 +49,20 @@ const getFirstTextFromResource = (resource: { readonly contents: ReadonlyArray<u
 
 test('should expose tools, resources, and prompts when starting MCP server', async () => {
   // Arrange
+  const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-mcp-smoke-root-'));
+  await mkdir(path.join(tmpRootAbs, '.firebat'), { recursive: true });
+  await writeFile(
+    path.join(tmpRootAbs, 'package.json'),
+    JSON.stringify({ name: 'firebat-mcp-smoke-fixture', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) + '\n',
+    'utf8',
+  );
+
   const client = new Client({ name: 'firebat-smoke', version: '0.0.0' });
   const serverEntry = path.resolve(import.meta.dir, '../../../index.ts');
   const transport = new StdioClientTransport({
     command: 'bun',
     args: [serverEntry, 'mcp'],
+    cwd: tmpRootAbs,
   });
 
   // Act
@@ -113,5 +122,7 @@ test('should expose tools, resources, and prompts when starting MCP server', asy
     expect(prompt.messages.length).toBeGreaterThan(0);
   } finally {
     await client.close();
+
+    await rm(tmpRootAbs, { recursive: true, force: true });
   }
 });

@@ -17,6 +17,8 @@ import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
 import { createFirebatProgram } from '../../ts-program';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { computeToolVersion } from '../../tool-version';
 import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
 import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
 import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
@@ -30,12 +32,10 @@ import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> => {
   await initHasher();
 
-  const baseToolVersion = '2.0.0-strict';
-  const defaultCacheVersion = '2026-02-02-tsgo-lsp-v1';
-  const cacheBuster = (process.env.FIREBAT_CACHE_BUSTER ?? '').trim();
-  const toolVersion = cacheBuster.length > 0 ? `${baseToolVersion}+${cacheBuster}` : `${baseToolVersion}+${defaultCacheVersion}`;
-  const projectKey = computeProjectKey({ toolVersion });
-  const orm = await getOrmDb();
+  const ctx = await resolveRuntimeContextFromCwd();
+  const toolVersion = computeToolVersion(ctx.config);
+  const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
   const artifactRepository = createHybridArtifactRepository({
     memory: createInMemoryArtifactRepository(),
     sqlite: createSqliteArtifactRepository(orm),

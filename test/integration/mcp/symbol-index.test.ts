@@ -1,7 +1,6 @@
-/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, firebat/no-any, firebat/no-inline-object-type, firebat/no-unknown */
-
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
 import { expect, test } from 'bun:test';
 
@@ -64,19 +63,29 @@ const hasMatchNamed = (value: unknown, expectedName: string): boolean => {
 
 test('should provide symbol index tools when connected via MCP', async () => {
   // Arrange
-  const tmpDbPath = path.join(
-    os.tmpdir(),
-    `firebat-symbol-index-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`,
-  );
+  const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-symbol-index-root-'));
+  const firebatDir = path.join(tmpRootAbs, '.firebat');
+  const tmpDbPath = path.join(firebatDir, 'firebat.sqlite');
 
-  process.env.FIREBAT_DB_PATH = tmpDbPath;
-  process.env.FIREBAT_CACHE_BUSTER = 'test-symbol-index';
+  await mkdir(firebatDir, { recursive: true });
+  await writeFile(
+    path.join(tmpRootAbs, 'package.json'),
+    JSON.stringify({ name: 'firebat-symbol-index-fixture', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) +
+      '\n',
+    'utf8',
+  );
+  await writeFile(
+    path.join(firebatDir, 'config.json'),
+    JSON.stringify({ dbPath: tmpDbPath, cacheBuster: 'test-symbol-index' }, null, 2) + '\n',
+    'utf8',
+  );
 
   const client = new Client({ name: 'firebat-symbol-index', version: '0.0.0' });
   const serverEntry = path.resolve(import.meta.dir, '../../../index.ts');
   const transport = new StdioClientTransport({
     command: 'bun',
     args: [serverEntry, 'mcp'],
+    cwd: tmpRootAbs,
   });
 
   // Act
@@ -152,5 +161,7 @@ test('should provide symbol index tools when connected via MCP', async () => {
     expect(statsAfterClear.symbolCount).toBe(0);
   } finally {
     await client.close();
+
+    await rm(tmpRootAbs, { recursive: true, force: true });
   }
 });

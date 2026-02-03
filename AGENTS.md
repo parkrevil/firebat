@@ -1,15 +1,9 @@
-
-# Firebat AGENTS (Rules)
-
-목표: 간단/명료/직관. 읽으면 바로 행동이 결정되어야 한다.
-
-----------------
+# Firebat
 
 ## 1) 코드 형태
 
 - 기본은 function.
 - class는 “리소스 수명/상태”가 있을 때만 허용한다.
-  - 예: sqlite repository, tsgo runner, ast-grep rule cache, oxlint runner
 
 ----------------
 
@@ -34,14 +28,6 @@
 
 ----------------
 
-## 4) import/export
-
-- `export *` 금지.
-- import는 파일 상단 1블록.
-- export는 파일 하단 1블록(중간 export 금지).
-
-----------------
-
 ## 5) MCP 도구 사용 정책 (Proactive-by-default)
 
 - 기본: MCP는 적극 사용한다.
@@ -54,7 +40,6 @@
 - context7: 언어/패키지/플랫폼/버전/옵션 같은 기술 사실은 기본 조회한다.
 - sequential-thinking: 항상 단계화(계획/가설/검증/리스크).
 - memory: 항상 검색/조회하고, 필요한 사실은 축적한다.
-  - 비밀/키/개인정보 저장 금지.
 
 중단/승인 게이트
 

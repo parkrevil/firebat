@@ -3,44 +3,12 @@ import type { DuplicateGroup, WasteFinding } from '../../../src/types';
 
 import { parseSource } from '../../../src/engine/parse-source';
 
-const parseSeed = (seedText: string | undefined): number => {
-  if (seedText === undefined) {
-    return 1;
-  }
-
-  const trimmed = seedText.trim();
-
-  if (trimmed.length === 0) {
-    return 1;
-  }
-
-  const asNumber = Number(trimmed);
-
-  if (Number.isFinite(asNumber)) {
-    return (asNumber | 0) >>> 0;
-  }
-
+export const getFuzzSeed = (): number => {
   return 1;
 };
 
-export const getFuzzSeed = (): number => {
-  return parseSeed(Bun.env.FIREBAT_FUZZ_SEED);
-};
-
 export const getFuzzIterations = (fallback: number): number => {
-  const raw = Bun.env.FIREBAT_FUZZ_ITERS;
-
-  if (raw === undefined || raw.length === 0) {
-    return fallback;
-  }
-
-  const parsed = Number(raw);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return Math.floor(parsed);
+  return fallback;
 };
 
 export const createPrng = (seed: number) => {

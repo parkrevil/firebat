@@ -9,16 +9,14 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 
 const DB_RELATIVE_PATH = '.firebat/firebat.sqlite';
 
-const resolveDbPath = (cwd: string): string => {
-  const configuredPath = process.env.FIREBAT_DB_PATH;
+const resolveDbPath = (rootAbs: string, dbPath: string | undefined): string => {
+  const configured = dbPath?.trim() ?? '';
 
-  if (configuredPath !== undefined && configuredPath.trim().length > 0) {
-    const trimmed = configuredPath.trim();
-
-    return path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
+  if (configured.length > 0) {
+    return path.isAbsolute(configured) ? configured : path.resolve(rootAbs, configured);
   }
 
-  return path.resolve(cwd, DB_RELATIVE_PATH);
+  return path.resolve(rootAbs, DB_RELATIVE_PATH);
 };
 
 const ensureDatabase = async (dbFilePath: string): Promise<Database> => {
@@ -28,38 +26,60 @@ const ensureDatabase = async (dbFilePath: string): Promise<Database> => {
 
   const db = new Database(dbFilePath);
 
-  // oxlint-disable-next-line typescript-eslint/no-deprecated
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA synchronous = NORMAL;
-    PRAGMA busy_timeout = 5000;
-    PRAGMA foreign_keys = ON;
-  `);
+  db.run('PRAGMA journal_mode = WAL;');
+  db.run('PRAGMA synchronous = NORMAL;');
+  db.run('PRAGMA busy_timeout = 5000;');
+  db.run('PRAGMA foreign_keys = ON;');
 
   return db;
 };
 
-let dbPromise: Promise<Database> | null = null;
-let ormPromise: Promise<FirebatDrizzleDb> | null = null;
+const dbPromisesByPath = new Map<string, Promise<Database>>();
+const ormPromisesByPath = new Map<string, Promise<FirebatDrizzleDb>>();
 
-const getDb =  async (cwd: string = process.cwd()): Promise<Database> => {
-  dbPromise ??= ensureDatabase(resolveDbPath(cwd));
+interface DbOpenInput {
+  readonly rootAbs?: string;
+  readonly dbPath?: string;
+}
 
-  return dbPromise;
+const getDb = async (input?: DbOpenInput): Promise<Database> => {
+  const rootAbs = input?.rootAbs ?? process.cwd();
+  const dbFilePath = resolveDbPath(rootAbs, input?.dbPath);
+  const existing = dbPromisesByPath.get(dbFilePath);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = ensureDatabase(dbFilePath);
+
+  dbPromisesByPath.set(dbFilePath, created);
+
+  return created;
 };
 
-const getOrmDb = async (cwd: string = process.cwd()): Promise<FirebatDrizzleDb> => {
-  ormPromise ??= (async (): Promise<FirebatDrizzleDb> => {
-      const sqlite = await getDb(cwd);
-      const orm = createDrizzleDb(sqlite);
-      const migrationsFolder = path.resolve(import.meta.dir, './migrations');
+const getOrmDb = async (input?: DbOpenInput): Promise<FirebatDrizzleDb> => {
+  const rootAbs = input?.rootAbs ?? process.cwd();
+  const dbFilePath = resolveDbPath(rootAbs, input?.dbPath);
+  const existing = ormPromisesByPath.get(dbFilePath);
 
-      migrate(orm, { migrationsFolder });
+  if (existing) {
+    return existing;
+  }
 
-      return orm;
-    })();
+  const created = (async (): Promise<FirebatDrizzleDb> => {
+    const sqlite = await getDb({ rootAbs, dbPath: input?.dbPath });
+    const orm = createDrizzleDb(sqlite);
+    const migrationsFolder = path.resolve(import.meta.dir, './migrations');
 
-  return ormPromise;
+    migrate(orm, { migrationsFolder });
+
+    return orm;
+  })();
+
+  ormPromisesByPath.set(dbFilePath, created);
+
+  return created;
 };
 
 export { getDb, getOrmDb };

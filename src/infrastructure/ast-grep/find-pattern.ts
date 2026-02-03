@@ -1,5 +1,3 @@
-/* oxlint-disable typescript-eslint/no-deprecated, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-call, typescript-eslint/no-explicit-any, firebat/no-any, firebat/no-unknown, firebat/no-inline-object-type, firebat/no-double-assertion, firebat/no-non-null-assertion */
-
 import { ts } from '@ast-grep/napi';
 
 import type { SourceSpan } from '../../types';

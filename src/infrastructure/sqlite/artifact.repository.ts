@@ -35,13 +35,11 @@ const createSqliteArtifactRepository = (db: FirebatDrizzleDb): ArtifactRepositor
       let parsed: JsonValue;
 
       try {
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         parsed = JSON.parse(row.payloadJson) as JsonValue;
       } catch {
         return Promise.resolve(null);
       }
 
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       return Promise.resolve(parsed as T);
     },
 

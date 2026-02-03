@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { CommentNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
 import { noTsIgnoreRule } from './no-ts-ignore';
 
 describe('no-ts-ignore', () => {

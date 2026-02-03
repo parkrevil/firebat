@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, TemplateElementValue } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { applyFixes, createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
 import { noBracketNotationRule } from './no-bracket-notation';
 
 describe('no-bracket-notation', () => {

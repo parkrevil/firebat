@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
 import { noUmbrellaTypesRule } from './no-umbrella-types';
 
 describe('no-umbrella-types', () => {

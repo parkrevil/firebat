@@ -8,6 +8,20 @@
       "when": 1770046924469,
       "tag": "0000_clever_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1770046924470,
+      "tag": "0001_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1770046924471,
+      "tag": "0002_symbol_index",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,6 @@ const runWithConcurrency = async <TInput>(
   const runners: Promise<void>[] = [];
 
   const runNext = async (): Promise<void> => {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const current = index;
 

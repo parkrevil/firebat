@@ -1,5 +1,3 @@
-/* oxlint-disable import/exports-last, firebat/single-exported-class, firebat/no-inline-object-type */
-
 export interface IFoo {
   x: number;
 }

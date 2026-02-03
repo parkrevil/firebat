@@ -1,5 +1,3 @@
-/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unsafe-return, firebat/no-any, typescript-eslint/strict-boolean-expressions */
-
 import * as path from 'node:path';
 
 import { getIndexStatsFromIndexUseCase, searchSymbolFromIndexUseCase } from '../symbol-index/symbol-index.usecases';

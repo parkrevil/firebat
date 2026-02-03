@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, Variable } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
-import { buildCommaTokens } from '../../test/utils/token-utils';
+import { applyFixes, createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
+import { buildCommaTokens } from '../test/utils/token-utils';
 import { unusedImportsRule } from './unused-imports';
 
 describe('unused-imports', () => {

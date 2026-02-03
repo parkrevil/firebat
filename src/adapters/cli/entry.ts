@@ -5,6 +5,8 @@ import { parseArgs } from '../../arg-parse';
 import { formatReport } from '../../report';
 import { discoverDefaultTargets } from '../../target-discovery';
 import { scanUseCase } from '../../application/scan/scan.usecase';
+import { appendFirebatLog } from '../../infra/logging';
+import { resolveFirebatRootFromCwd } from '../../root-resolver';
 
 const printHelp = (): void => {
   const lines = [
@@ -13,6 +15,7 @@ const printHelp = (): void => {
     'Usage:',
     '  firebat [targets...] [options]',
     '  firebat scan [targets...] [options]',
+    '  firebat install',
     '  firebat mcp',
     '',
     'Defaults:',
@@ -61,6 +64,18 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
+    try {
+      const rootAbs = await resolveFirebatRootFromCwd();
+
+      await appendFirebatLog(
+        rootAbs,
+        '.firebat/cli-error.log',
+        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
+      );
+    } catch {
+      // ignore
+    }
+
     console.error(message);
 
     return 1;
@@ -78,6 +93,18 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     report = await scanUseCase(options);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
+    try {
+      const rootAbs = await resolveFirebatRootFromCwd();
+
+      await appendFirebatLog(
+        rootAbs,
+        '.firebat/cli-error.log',
+        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
+      );
+    } catch {
+      // ignore
+    }
 
     console.error(`[firebat] Failed: ${message}`);
 

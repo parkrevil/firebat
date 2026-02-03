@@ -2,12 +2,35 @@ import * as path from 'node:path';
 
 import { expect, test } from 'bun:test';
 
+import * as z from 'zod';
+
 // NOTE:
 // - This test uses @modelcontextprotocol/inspector in CLI mode.
 // - The inspector package requires Node.js (see its README). Because this repo is Bun-first,
 //   we keep the test opt-in to avoid forcing Node in all environments.
 
-const maybeTest = process.env.FIREBAT_ENABLE_INSPECTOR_CLI_TEST === '1' ? test : test.skip;
+const isInspectorCliEnabled = async (): Promise<boolean> => {
+  try {
+    const rootAbs = path.resolve(import.meta.dir, '../../../..');
+    const configPath = path.join(rootAbs, '.firebat', 'config.json');
+    const file = Bun.file(configPath);
+
+    if (!(await file.exists())) {
+      return false;
+    }
+
+    const schema = z.looseObject({
+      enableInspectorCliTest: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(await file.json());
+
+    return parsed.success && parsed.data.enableInspectorCliTest === true;
+  } catch {
+    return false;
+  }
+};
+
+const maybeTest = (await isInspectorCliEnabled()) ? test : test.skip;
 
 maybeTest('should list tools when running inspector CLI (opt-in)', async () => {
   // Arrange
@@ -28,9 +51,6 @@ maybeTest('should list tools when running inspector CLI (opt-in)', async () => {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
-    env: {
-      ...process.env,
-    },
   });
   // Act
   const [stdout, stderr, exitCode] = await Promise.all([

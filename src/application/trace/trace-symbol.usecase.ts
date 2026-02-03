@@ -11,6 +11,8 @@ import { createHybridArtifactRepository } from '../../infrastructure/hybrid/arti
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
 import type { SourceSpan } from '../../types';
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeInputsDigest } from '../scan/inputs-digest';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
@@ -259,12 +261,11 @@ const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> =
 const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolOutput> => {
   await initHasher();
 
-  const baseToolVersion = '2.0.0-strict';
-  const defaultCacheVersion = '2026-02-02-tsgo-lsp-v1';
-  const cacheBuster = (process.env.FIREBAT_CACHE_BUSTER ?? '').trim();
-  const toolVersion = cacheBuster.length > 0 ? `${baseToolVersion}+${cacheBuster}` : `${baseToolVersion}+${defaultCacheVersion}`;
-  const projectKey = computeProjectKey({ toolVersion });
-  const orm = await getOrmDb();
+  const ctx = await resolveRuntimeContextFromCwd();
+
+  const toolVersion = computeToolVersion(ctx.config);
+  const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
   const artifactRepository = createHybridArtifactRepository({
     memory: createInMemoryArtifactRepository(),
     sqlite: createSqliteArtifactRepository(orm),
@@ -306,7 +307,6 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
   };
   const result = await runTsgoTraceSymbol(tsgoRequest);
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
   const normalized = normalizeTrace({ structured: result.structured as JsonValue | undefined });
   const outputBase = {
     ok: result.ok,

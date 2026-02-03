@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { applyFixes, createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
 describe('padding-line-between-statements', () => {

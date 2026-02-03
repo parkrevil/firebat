@@ -1,4 +1,4 @@
-import type { SourceToken } from '../../src/types';
+import type { SourceToken } from '../../types';
 
 const COMMA = ',';
 
