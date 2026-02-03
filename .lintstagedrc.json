@@ -1,3 +1,0 @@
-{
-  "*.{ts,json,md}": ["bunx eslint --fix", "bunx prettier --write"]
-}
