@@ -91,7 +91,7 @@ const runMcpServer = async (): Promise<void> => {
   // - No `process.exit()` calls (transport stability)
   // - No stdout logs (reserved for protocol messages)
 
-  const server = new McpServer({
+  const server: any = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
   });
@@ -1093,7 +1093,15 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof ReplaceRegexInputSchema>) => {
-      const structured = await replaceRegexUseCase(args);
+      const structured = await replaceRegexUseCase({
+        root: args.root,
+        relativePath: args.relativePath,
+        regex: args.regex,
+        repl: args.repl,
+        ...(args.allowMultipleOccurrences !== undefined
+          ? { allowMultipleOccurrences: args.allowMultipleOccurrences }
+          : {}),
+      });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1190,7 +1198,13 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ matches: z.array(z.any()) }).strict(),
     },
     async (args: z.infer<typeof QuerySymbolsInputSchema>) => {
-      const structured = await querySymbolsUseCase(args);
+      const structured = await querySymbolsUseCase({
+        query: args.query,
+        ...(args.root !== undefined ? { root: args.root } : {}),
+        ...(args.kind !== undefined ? { kind: args.kind } : {}),
+        ...(args.file !== undefined ? { file: args.file } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1220,7 +1234,12 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof IndexExternalLibrariesInputSchema>) => {
-      const structured = await indexExternalLibrariesUseCase(args);
+      const structured = await indexExternalLibrariesUseCase({
+        root: args.root,
+        ...(args.maxFiles !== undefined ? { maxFiles: args.maxFiles } : {}),
+        ...(args.includePatterns !== undefined ? { includePatterns: args.includePatterns } : {}),
+        ...(args.excludePatterns !== undefined ? { excludePatterns: args.excludePatterns } : {}),
+      });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1262,7 +1281,13 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), matches: z.any().optional(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof SearchExternalLibrarySymbolsInputSchema>) => {
-      const structured = await searchExternalLibrarySymbolsUseCase(args);
+      const structured = await searchExternalLibrarySymbolsUseCase({
+        root: args.root,
+        ...(args.libraryName !== undefined ? { libraryName: args.libraryName } : {}),
+        ...(args.symbolName !== undefined ? { symbolName: args.symbolName } : {}),
+        ...(args.kind !== undefined ? { kind: args.kind } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1281,7 +1306,12 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), definition: z.any().optional(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof ResolveSymbolInputSchema>) => {
-      const structured = await resolveSymbolUseCase(args);
+      const structured = await resolveSymbolUseCase({
+        root: args.root,
+        filePath: args.filePath,
+        symbolName: args.symbolName,
+        ...(args.tsconfigPath !== undefined ? { tsconfigPath: args.tsconfigPath } : {}),
+      });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1399,7 +1429,7 @@ const runMcpServer = async (): Promise<void> => {
       description: 'The last FirebatReport produced by scan during this MCP session.',
       mimeType: 'application/json',
     },
-    uri => ({
+    (uri: URL) => ({
       contents: [
         {
           uri: uri.href,
@@ -1419,7 +1449,7 @@ const runMcpServer = async (): Promise<void> => {
         reportJson: z.string().describe('JSON string of FirebatReport'),
       },
     },
-    args => {
+    (args: { reportJson: string }) => {
       const { reportJson } = args;
 
       return {

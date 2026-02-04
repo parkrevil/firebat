@@ -66,7 +66,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     const message = err instanceof Error ? err.message : String(err);
 
     try {
-      const rootAbs = await resolveFirebatRootFromCwd();
+      const { rootAbs } = await resolveFirebatRootFromCwd();
 
       await appendFirebatLog(
         rootAbs,
@@ -96,7 +96,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     const message = err instanceof Error ? err.message : String(err);
 
     try {
-      const rootAbs = await resolveFirebatRootFromCwd();
+      const { rootAbs } = await resolveFirebatRootFromCwd();
 
       await appendFirebatLog(
         rootAbs,

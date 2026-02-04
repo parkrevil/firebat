@@ -5,7 +5,7 @@ import { resolveFirebatRootFromCwd } from '../../root-resolver';
 const installMcpErrorHandlers = (): void => {
   const append = async (message: string): Promise<void> => {
     try {
-      const rootAbs = await resolveFirebatRootFromCwd();
+      const { rootAbs } = await resolveFirebatRootFromCwd();
 
       await appendFirebatLog(rootAbs, '.firebat/mcp-error.log', message);
     } catch {

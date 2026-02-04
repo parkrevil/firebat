@@ -26,8 +26,6 @@ interface RunOxlintInput {
   readonly configPath?: string;
 }
 
-const splitCommand = (value: string): string[] => value.split(/\s+/).filter(Boolean);
-
 const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
   const candidates = [
     // project-local

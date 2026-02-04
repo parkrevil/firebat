@@ -39,7 +39,7 @@ const main = async (): Promise<void> => {
 		const relativeLogPath = subcommand === 'mcp' ? '.firebat/mcp-error.log' : '.firebat/cli-error.log';
 
 		try {
-			const rootAbs = await resolveFirebatRootFromCwd();
+			const { rootAbs } = await resolveFirebatRootFromCwd();
 
 			await appendFirebatLog(rootAbs, relativeLogPath, message);
 		} catch {

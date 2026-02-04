@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { SourceSpan } from '../types';
-import type { ParsedFile } from './types';
+import type { NodeValue, ParsedFile } from './types';
 
 import { getLineColumn } from './source-position';
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode } from './oxc-ast-utils';
@@ -15,7 +15,7 @@ interface ExtractedSymbol {
 }
 
 interface NodeWithInit {
-  readonly init?: unknown;
+  readonly init?: NodeValue;
 }
 
 const getNodeSpan = (node: Node, sourceText: string): SourceSpan => ({
@@ -27,9 +27,9 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
   const out: ExtractedSymbol[] = [];
   const { program, sourceText } = file;
 
-  const visit = (value: unknown): void => {
+  const visit = (value: NodeValue): void => {
     if (Array.isArray(value)) {
-      for (const entry of value) {
+      for (const entry of value as ReadonlyArray<NodeValue>) {
         visit(entry);
       }
 
@@ -106,7 +106,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       return;
     }
 
-    const entries = Object.entries(node);
+    const entries = Object.entries(node) as Array<[string, NodeValue]>;
 
     for (const [key, childValue] of entries) {
       if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {

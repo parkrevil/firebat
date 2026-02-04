@@ -99,11 +99,11 @@ const getArray = (obj: JsonObject, key: string): ReadonlyArray<JsonValue> | unde
   return Array.isArray(value) ? value : undefined;
 };
 
-const isTraceNodeKind = (value: JsonValue): value is TraceNodeKind =>
+const isTraceNodeKind = (value: JsonValue | undefined): value is TraceNodeKind =>
   typeof value === 'string' &&
   (value === 'file' || value === 'symbol' || value === 'type' || value === 'reference' || value === 'unknown');
 
-const isTraceEdgeKind = (value: JsonValue): value is TraceEdgeKind =>
+const isTraceEdgeKind = (value: JsonValue | undefined): value is TraceEdgeKind =>
   typeof value === 'string' &&
   (value === 'references' ||
     value === 'imports' ||
@@ -221,7 +221,7 @@ const normalizeTrace = (input: NormalizeTraceInput): NormalizeTraceResult => {
   const empty: TraceGraph = { nodes: [], edges: [] };
 
   if (!isObject(input.structured)) {
-    return { graph: empty, evidence: [], raw: input.structured };
+    return input.structured === undefined ? { graph: empty, evidence: [] } : { graph: empty, evidence: [], raw: input.structured };
   }
 
   const structured = input.structured as StructuredTrace;
