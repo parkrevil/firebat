@@ -1,4 +1,5 @@
 import { hashString } from '../../engine/hasher';
+import { CACHE_SCHEMA_VERSION } from './cache-namespace';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
@@ -10,7 +11,7 @@ interface ComputeProjectKeyInput {
 const computeProjectKey = (input: ComputeProjectKeyInput): string => {
   const cwd = input.cwd ?? process.cwd();
 
-  return hashString(`firebat|${input.toolVersion}|${normalizePath(cwd)}|${Bun.version}`);
+  return hashString(`firebat|schema=${String(CACHE_SCHEMA_VERSION)}|${input.toolVersion}|${normalizePath(cwd)}|${Bun.version}`);
 };
 
 interface ComputeScanArtifactKeyInput {

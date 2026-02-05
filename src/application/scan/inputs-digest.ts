@@ -7,11 +7,12 @@ interface ComputeInputsDigestInput {
   readonly projectKey: string;
   readonly targets: ReadonlyArray<string>;
   readonly fileIndexRepository: FileIndexRepository;
+  readonly extraParts?: ReadonlyArray<string>;
 }
 
 const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<string> => {
   const normalizedTargets = [...input.targets].map(normalizePath).sort();
-  const parts: string[] = [];
+  const parts: string[] = [...(input.extraParts ?? [])];
 
   for (const filePath of normalizedTargets) {
     try {

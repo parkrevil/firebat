@@ -54,7 +54,9 @@ import { getSymbolsOverviewUseCase, querySymbolsUseCase } from '../../applicatio
 import { traceSymbolUseCase } from '../../application/trace/trace-symbol.usecase';
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
 import { readdir } from 'node:fs/promises';
+import { watch } from 'node:fs';
 import * as path from 'node:path';
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
@@ -91,11 +93,72 @@ const runMcpServer = async (): Promise<void> => {
   // - No `process.exit()` calls (transport stability)
   // - No stdout logs (reserved for protocol messages)
 
+  const ctx = await resolveRuntimeContextFromCwd();
+
   const server: any = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
   });
   let lastReport: FirebatReport | null = null;
+
+  // Bootstrap: ensure symbol index is up-to-date once on server start.
+  // Then keep it updated with best-effort directory watchers.
+  try {
+    await indexSymbolsUseCase({ root: ctx.rootAbs });
+
+    const targets = await discoverDefaultTargets(ctx.rootAbs);
+    const targetSet = new Set(targets.map(t => path.resolve(t)));
+    const dirSet = new Set(targets.map(t => path.dirname(path.resolve(t))));
+    const pending = new Set<string>();
+    let flushTimer: Timer | null = null;
+
+    const flush = (): void => {
+      flushTimer = null;
+
+      if (pending.size === 0) {
+        return;
+      }
+
+      const batch = Array.from(pending);
+      pending.clear();
+
+      void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch }).catch(() => undefined);
+    };
+
+    const scheduleFlush = (): void => {
+      if (flushTimer) {
+        return;
+      }
+
+      flushTimer = setTimeout(flush, 250);
+    };
+
+    for (const dirAbs of dirSet) {
+      try {
+        const w = watch(dirAbs, { persistent: true }, (_event, filename) => {
+          if (!filename) {
+            return;
+          }
+
+          const abs = path.resolve(dirAbs, String(filename));
+
+          if (!targetSet.has(abs)) {
+            return;
+          }
+
+          pending.add(abs);
+          scheduleFlush();
+        });
+
+        // Prevent the watcher from keeping large resources if closed.
+        w.on('error', () => undefined);
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Best-effort: MCP still serves tools even if bootstrap fails.
+  }
   const ScanInputSchema = z
     .object({
       targets: z.array(z.string()).optional(),
@@ -121,7 +184,7 @@ const runMcpServer = async (): Promise<void> => {
     async (args: z.infer<typeof ScanInputSchema>) => {
       const t0 = nowMs();
       const targets =
-        args.targets !== undefined && args.targets.length > 0 ? args.targets : await discoverDefaultTargets(process.cwd());
+        args.targets !== undefined && args.targets.length > 0 ? args.targets : await discoverDefaultTargets(ctx.rootAbs);
       const options: FirebatCliOptions = {
         targets,
         format: 'json',

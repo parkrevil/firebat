@@ -15,6 +15,7 @@ import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeInputsDigest } from '../scan/inputs-digest';
+import { computeCacheNamespace } from '../scan/cache-namespace';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
@@ -278,10 +279,13 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
 
   await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4 });
 
+  const cacheNamespace = await computeCacheNamespace({ toolVersion });
+
   const inputsDigest = await computeInputsDigest({
     projectKey,
     targets: relatedFiles,
     fileIndexRepository,
+    extraParts: [`ns:${cacheNamespace}`],
   });
   const artifactKey = computeTraceArtifactKey({
     entryFile: relatedFiles[0] ?? input.entryFile,

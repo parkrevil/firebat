@@ -28,6 +28,8 @@ import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/fil
 import { indexTargets } from '../indexing/file-indexer';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
+import { computeCacheNamespace } from './cache-namespace';
+import { computeProjectInputsDigest } from './project-inputs-digest';
 
 const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> => {
   await initHasher();
@@ -52,10 +54,18 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     concurrency: 8,
   });
 
+  const cacheNamespace = await computeCacheNamespace({ toolVersion });
+  const projectInputsDigest = await computeProjectInputsDigest({
+    projectKey,
+    rootAbs: ctx.rootAbs,
+    fileIndexRepository,
+  });
+
   const inputsDigest = await computeInputsDigest({
     projectKey,
     targets: options.targets,
     fileIndexRepository,
+    extraParts: [`ns:${cacheNamespace}`, `project:${projectInputsDigest}`],
   });
   const artifactKey = computeScanArtifactKey({
     detectors: options.detectors,
