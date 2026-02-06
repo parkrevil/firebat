@@ -1,50 +1,30 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
 
-  // CLI behavior
-  "cli": {
-    "logLevel": "error"
+  "logging": {
+    "level": "error",
+    "filePath": "./.firebat/firebat.log"
   },
 
-  // Default scan options (CLI and MCP)
-  "scan": {
+  "output": {
     "format": "text",
-    "minSize": "auto",
-    "maxForwardDepth": 0,
-    "exitOnFindings": true,
-    "detectors": [
-      "duplicates",
-      "waste",
-      "typecheck",
-      "dependencies",
-      "coupling",
-      "duplication",
-      "nesting",
-      "early-return",
-      "noop",
-      "api-drift",
-      "forwarding"
-    ]
+    "exitOnFindings": true
   },
 
-  // MCP-specific overrides
-  "mcp": {
-    "scan": {
-      "minSize": "auto",
-      "maxForwardDepth": 0,
-      "detectors": [
-        "duplicates",
-        "waste",
-        "typecheck",
-        "dependencies",
-        "coupling",
-        "duplication",
-        "nesting",
-        "early-return",
-        "noop",
-        "api-drift",
-        "forwarding"
-      ]
-    }
-  }
+  "features": {
+    "exact-duplicates": { "minSize": "auto" },
+    "structural-duplicates": { "minSize": "auto" },
+    "lint": true,
+    "waste": true,
+    "typecheck": true,
+    "dependencies": true,
+    "coupling": true,
+    "nesting": true,
+    "early-return": true,
+    "noop": true,
+    "api-drift": true,
+    "forwarding": { "maxForwardDepth": 0 }
+  },
+
+  "mcp": "inherit"
 }

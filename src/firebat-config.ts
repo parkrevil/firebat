@@ -67,6 +67,7 @@ export interface FirebatMcpConfigObject {
 export type FirebatMcpConfig = 'inherit' | FirebatMcpConfigObject;
 
 export interface FirebatConfig {
+	readonly $schema?: string | undefined;
 	readonly logging?: FirebatLoggingConfig | undefined;
 	readonly output?: FirebatOutputConfig | undefined;
 	readonly features?: FirebatFeaturesConfig | undefined;
@@ -75,6 +76,7 @@ export interface FirebatConfig {
 
 export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 	.object({
+		$schema: z.string().optional(),
 		logging: z
 			.object({
 				filePath: z.string().optional(),
