@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
+import { applyFixes, createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { blankLinesBetweenStatementGroupsRule } from './blank-lines-between-statement-groups';
 
 describe('blank-lines-between-statement-groups', () => {

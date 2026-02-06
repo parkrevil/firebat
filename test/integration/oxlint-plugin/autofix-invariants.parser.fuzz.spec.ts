@@ -1,6 +1,6 @@
 import { describe, it } from 'bun:test';
 
-import { canRunParserAutofixInvariantsFuzz, runParserAutofixInvariantsFuzz } from '../utils/autofix-invariants-parser-fuzz';
+import { canRunParserAutofixInvariantsFuzz, runParserAutofixInvariantsFuzz } from './utils/autofix-invariants-parser-fuzz';
 
 describe('autofix-invariants.parser.fuzz', () => {
   const runCase = canRunParserAutofixInvariantsFuzz() ? it : it.skip;

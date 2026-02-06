@@ -546,14 +546,18 @@ export const collectUnknownProofCandidates = (input: {
 	readonly boundaryGlobs: ReadonlyArray<string>;
 	readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
 } => {
-	const boundaryGlobs = (input.boundaryGlobs ?? DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS).map(p => normalizePath(p));
+	const boundaryGlobs = (input.boundaryGlobs ?? [])
+		.map(p => normalizePath(p).trim())
+		.filter(p => p.length > 0);
 	const boundaryMatchers = compileGlobs(boundaryGlobs);
 
 	const perFile = new Map<string, UnknownProofCandidates>();
 
 	for (const file of input.program) {
 		const filePath = file.filePath;
-		const boundary = isBoundaryFile(input.rootAbs, filePath, boundaryMatchers);
+		const boundary = boundaryGlobs.length > 0
+			? isBoundaryFile(input.rootAbs, filePath, boundaryMatchers)
+			: false;
 		const typeAssertionFindings: UnknownProofFinding[] = [];
 		const nonBoundaryBindings: BindingCandidate[] = [];
 		const boundaryUnknownUsages: BoundaryUsageCandidate[] = [];

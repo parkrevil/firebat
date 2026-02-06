@@ -1,4 +1,4 @@
-import type { SourceToken } from '../../types';
+import type { SourceToken } from '../../../../src/oxlint-plugin/types';
 
 const COMMA = ',';
 

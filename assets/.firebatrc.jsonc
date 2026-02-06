@@ -1,52 +1,67 @@
 {
+  // JSON schema for editor validation.
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
 
-  // Internal firebat logging.
-  // - `level`: minimum severity written to stderr (silent|error|warn|info)
-  // - `filePath`: optional file sink (absolute path or relative to repo root)
-  "logging": {
-    "level": "error",
-    "filePath": "./.firebat/firebat.log",
-  },
-
-  // Default CLI behavior (can be overridden by flags).
-  "output": {
-    // `text` prints a human-readable summary; `json` prints the full report JSON.
-    "format": "text",
-
-    // When true, CLI exits non-zero if blocking findings exist.
-    // Equivalent to: false when `--no-exit` is used.
-    "exitOnFindings": true,
-  },
-
-  // Per-feature toggles.
-  // - `false` disables the feature.
-  // - `true` enables the feature with defaults.
-  // Some features support options via an object.
+  // Per-feature toggles and options.
   "features": {
-    // Duplicate detectors share the same size threshold.
-    // If both specify `minSize`, they must match.
+    // Detect exact duplicate code blocks/functions.
     "exact-duplicates": { "minSize": "auto" },
+
+    // Detect structurally-similar duplicates (renames/literals can differ).
     "structural-duplicates": { "minSize": "auto" },
 
-    // Run oxlint and include diagnostics in the scan report.
+    // Run oxlint and include diagnostics in the report.
     "lint": true,
 
+    // Detect dead stores / overwrites / wasted assignments.
     "waste": true,
+
+    // Run TypeScript typecheck diagnostics.
     "typecheck": true,
+
+    // Build dependency graph analysis.
     "dependencies": true,
+
+    // Coupling hotspots based on dependency graph.
     "coupling": true,
+
+    // Nesting/complexity signals (deep control flow).
     "nesting": true,
+
+    // Early-return / guard-clause signals.
     "early-return": true,
+
+    // No-op expressions/statements.
     "noop": true,
+
+    // Public API shape drift signals.
     "api-drift": true,
 
     // Thin-wrapper forwarding chain detection.
     "forwarding": { "maxForwardDepth": 0 },
+
+    // Unknown-proof checks (propagation-only). Optional boundaryGlobs can restrict boundary matching.
+    "unknown-proof": true
   },
 
-  // MCP overrides.
-  // - Use "inherit" to reuse root config.
-  // - Per-feature values can be: false | "inherit" | {options}
-  "mcp": "inherit",
+  // Internal firebat logging (stderr threshold + optional file sink).
+  "logging": {
+    // Minimum severity emitted to stderr: silent|error|warn|info.
+    "level": "error",
+
+    // Optional log file path (absolute or relative to project root).
+    "filePath": "./.firebat/firebat.log"
+  },
+
+  // CLI output defaults.
+  "output": {
+    // Output format: text|json.
+    "format": "text",
+
+    // When true, CLI exits non-zero if blocking findings exist.
+    "exitOnFindings": true
+  },
+
+  // MCP overrides (use "inherit" to reuse root config).
+  "mcp": "inherit"
 }

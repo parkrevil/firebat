@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
+import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noNonNullAssertionRule } from './no-non-null-assertion';
 
 describe('no-non-null-assertion', () => {

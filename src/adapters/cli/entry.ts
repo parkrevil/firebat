@@ -4,12 +4,11 @@ import type { FirebatConfig } from '../../firebat-config';
 
 import { parseArgs } from '../../arg-parse';
 import { formatReport } from '../../report';
-import { discoverDefaultTargets } from '../../target-discovery';
+import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { appendFirebatLog } from '../../infra/logging';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
-import { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../features/unknown-proof';
 
 const LOG_LEVELS = ['silent', 'error', 'warn', 'info'] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
@@ -58,7 +57,7 @@ const printHelp = (): void => {
     '  --min-size <n|auto>      Minimum size threshold for duplicates (default: auto)',
     '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
     '  --only <list>            Limit detectors to exact-duplicates,waste,unknown-proof,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
-    '  (config) unknown-proof   Configure boundary globs via features["unknown-proof"].boundaryGlobs (default: src/adapters/**, src/infrastructure/**)',
+    '  (config) unknown-proof   Configure boundary globs via features["unknown-proof"].boundaryGlobs (default: global)',
     '  --config <path>          Config file path (default: <root>/.firebatrc.jsonc)',
     '  --log-level <level>      silent|error|warn|info (default: error)',
     '  --no-exit                Always exit 0 even if findings exist',
@@ -121,14 +120,14 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   }
 
   if (value === true) {
-    return DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+    return undefined;
   }
 
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
-      : DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+      : undefined;
   }
 
   return undefined;
@@ -196,7 +195,12 @@ const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOption
   };
 
   if (merged.targets.length > 0) {
-    return merged;
+    const targets = await expandTargets(merged.targets);
+
+    return {
+      ...merged,
+      targets,
+    };
   }
 
   const targets = await discoverDefaultTargets(rootAbs);

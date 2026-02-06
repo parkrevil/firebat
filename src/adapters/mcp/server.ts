@@ -7,7 +7,7 @@ import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
-import { discoverDefaultTargets } from '../../target-discovery';
+import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
 import { findPatternUseCase } from '../../application/find-pattern/find-pattern.usecase';
 import {
   deleteMemoryUseCase,
@@ -59,7 +59,6 @@ import * as path from 'node:path';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
 import type { FirebatConfig } from '../../firebat-config';
-import { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../features/unknown-proof/analyzer';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
@@ -132,14 +131,15 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   }
 
   if (value === true) {
-    return DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+    // Global by default: do not apply boundary matching unless explicitly configured.
+    return undefined;
   }
 
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
-      : DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+      : undefined;
   }
 
   return undefined;
@@ -284,8 +284,9 @@ const runMcpServer = async (): Promise<void> => {
     },
     async (args: z.infer<typeof ScanInputSchema>) => {
       const t0 = nowMs();
-      const targets =
+      const rawTargets =
         args.targets !== undefined && args.targets.length > 0 ? args.targets : await discoverDefaultTargets(ctx.rootAbs);
+      const targets = await expandTargets(rawTargets);
 
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);

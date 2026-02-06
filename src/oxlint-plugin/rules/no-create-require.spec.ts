@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
+import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noCreateRequireRule } from './no-create-require';
 
 describe('no-create-require', () => {

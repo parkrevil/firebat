@@ -5,9 +5,9 @@ const uniqueSorted = (values: ReadonlyArray<string>): string[] => Array.from(new
 const toAbsolutePaths = (cwd: string, filePaths: ReadonlyArray<string>): string[] =>
   uniqueSorted(filePaths.map(filePath => path.resolve(cwd, filePath)));
 
-const runGitLsFiles = (cwd: string, patterns: ReadonlyArray<string>): string[] | null => {
+const runGitLsFiles = (cwd: string, patterns?: ReadonlyArray<string>): string[] | null => {
   const result = Bun.spawnSync({
-    cmd: ['git', 'ls-files', ...patterns],
+    cmd: ['git', 'ls-files', ...(patterns ?? [])],
     cwd,
     stdout: 'pipe',
     stderr: 'pipe',
@@ -44,6 +44,8 @@ const scanWithGlob = async (cwd: string, patterns: ReadonlyArray<string>): Promi
 };
 
 const DEFAULT_SOURCE_PATTERNS: ReadonlyArray<string> = [
+  'src/**/*.ts',
+  'src/**/*.tsx',
   'packages/**/src/**/*.ts',
   'packages/**/src/**/*.tsx',
   'examples/**/src/**/*.ts',
@@ -52,14 +54,74 @@ const DEFAULT_SOURCE_PATTERNS: ReadonlyArray<string> = [
   'verify/**/*.ts',
 ];
 
-export const discoverDefaultTargets = async (cwd: string = process.cwd()): Promise<string[]> => {
-  const gitMatches = runGitLsFiles(cwd, DEFAULT_SOURCE_PATTERNS);
+const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
-  if (gitMatches !== null) {
-    return toAbsolutePaths(cwd, gitMatches);
+const shouldIncludeSourceFile = (filePath: string): boolean => {
+  const normalized = normalizePath(filePath);
+  const segments = normalized.split('/');
+  const nodeModulesSegment = 'node' + '_modules';
+
+  if (segments.includes(nodeModulesSegment)) {
+    return false;
   }
 
-  const globMatches = await scanWithGlob(cwd, DEFAULT_SOURCE_PATTERNS);
+  if (normalized.endsWith('.d.ts')) {
+    return false;
+  }
 
-  return toAbsolutePaths(cwd, globMatches);
+  return normalized.endsWith('.ts') || normalized.endsWith('.tsx');
+};
+
+const scanDirForSources = async (dirAbs: string): Promise<string[]> => {
+  const patterns: ReadonlyArray<string> = ['**/*.ts', '**/*.tsx'];
+  const out: string[] = [];
+
+  for (const pattern of patterns) {
+    const glob = new Bun.Glob(pattern);
+
+    for await (const relPath of glob.scan({ cwd: dirAbs, onlyFiles: true, followSymlinks: false })) {
+      out.push(path.resolve(dirAbs, relPath));
+    }
+  }
+
+  return uniqueSorted(out).filter(shouldIncludeSourceFile);
+};
+
+export const expandTargets = async (targets: ReadonlyArray<string>): Promise<string[]> => {
+  const expanded: string[] = [];
+
+  for (const raw of targets) {
+    const abs = path.resolve(raw);
+
+    try {
+      const stat = await Bun.file(abs).stat();
+
+      if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
+        const files = await scanDirForSources(abs);
+        expanded.push(...files);
+        continue;
+      }
+
+      if (shouldIncludeSourceFile(abs)) {
+        expanded.push(abs);
+      }
+    } catch {
+      // Ignore missing/unreadable entries.
+      continue;
+    }
+  }
+
+  return uniqueSorted(expanded);
+};
+
+export const discoverDefaultTargets = async (cwd: string = process.cwd()): Promise<string[]> => {
+  const gitAll = runGitLsFiles(cwd);
+
+  if (gitAll !== null) {
+    return toAbsolutePaths(cwd, gitAll).filter(shouldIncludeSourceFile);
+  }
+
+  const globMatches = await scanWithGlob(cwd, ['**/*.ts', '**/*.tsx']);
+
+  return toAbsolutePaths(cwd, globMatches).filter(shouldIncludeSourceFile);
 };

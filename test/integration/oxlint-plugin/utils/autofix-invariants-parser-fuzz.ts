@@ -1,11 +1,11 @@
 import { parseSync as oxcParseSync, type Program } from 'oxc-parser';
 
-import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../types';
+import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../../../src/oxlint-plugin/types';
 
-import { blankLinesBetweenStatementGroupsRule } from '../../rules/blank-lines-between-statement-groups';
-import { noBracketNotationRule } from '../../rules/no-bracket-notation';
-import { paddingLineBetweenStatementsRule } from '../../rules/padding-line-between-statements';
-import { unusedImportsRule } from '../../rules/unused-imports';
+import { blankLinesBetweenStatementGroupsRule } from '../../../../src/oxlint-plugin/rules/blank-lines-between-statement-groups';
+import { noBracketNotationRule } from '../../../../src/oxlint-plugin/rules/no-bracket-notation';
+import { paddingLineBetweenStatementsRule } from '../../../../src/oxlint-plugin/rules/padding-line-between-statements';
+import { unusedImportsRule } from '../../../../src/oxlint-plugin/rules/unused-imports';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
 

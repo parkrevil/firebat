@@ -1,13 +1,9 @@
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, UnknownProofAnalysis, UnknownProofFinding } from '../../types';
 
-import {
-	collectUnknownProofCandidates,
-	DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-} from './candidates';
-import { runTsgoUnknownProofChecks } from './tsgo-checks';
 
-export { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from './candidates';
+import { collectUnknownProofCandidates } from './candidates';
+import { runTsgoUnknownProofChecks } from './tsgo-checks';
 
 export const createEmptyUnknownProof = (): UnknownProofAnalysis => ({
 	status: 'ok',
@@ -24,9 +20,13 @@ export const analyzeUnknownProof = async (
 	},
 ): Promise<UnknownProofAnalysis> => {
 	const rootAbs = input?.rootAbs ?? process.cwd();
-	const boundaryGlobs = input?.boundaryGlobs ?? DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+	const boundaryGlobs = input?.boundaryGlobs;
 
-	const collected = collectUnknownProofCandidates({ program, rootAbs, boundaryGlobs });
+	const collected = collectUnknownProofCandidates({
+		program,
+		rootAbs,
+		...(boundaryGlobs !== undefined ? { boundaryGlobs } : {}),
+	});
 	const findings: UnknownProofFinding[] = [];
 	const tsgoCandidatesByFile = new Map<string, ReadonlyArray<{ name: string; offset: number; span: SourceSpan }>>();
 	const boundaryUsageCandidatesByFile = new Map<

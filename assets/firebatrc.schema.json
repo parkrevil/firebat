@@ -48,6 +48,9 @@
         "exact-duplicates": {
           "$ref": "#/$defs/exactDuplicatesToggle"
         },
+        "unknown-proof": {
+          "$ref": "#/$defs/unknownProofToggle"
+        },
         "structural-duplicates": {
           "$ref": "#/$defs/structuralDuplicatesToggle"
         },
@@ -78,6 +81,7 @@
               "additionalProperties": false,
               "properties": {
                 "exact-duplicates": { "$ref": "#/$defs/exactDuplicatesInheritable" },
+                "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
                 "structural-duplicates": { "$ref": "#/$defs/structuralDuplicatesInheritable" },
                 "forwarding": { "$ref": "#/$defs/forwardingInheritable" },
                 "waste": { "$ref": "#/$defs/emptyInheritable" },
@@ -121,6 +125,24 @@
         }
       ]
     },
+    "unknownProofToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "boundaryGlobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          },
+          "minProperties": 1
+        }
+      ]
+    },
     "structuralDuplicatesToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -157,6 +179,25 @@
           "additionalProperties": false,
           "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
           "required": ["minSize"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "unknownProofInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "boundaryGlobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          },
           "minProperties": 1
         }
       ]

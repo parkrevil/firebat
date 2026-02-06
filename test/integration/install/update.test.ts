@@ -5,7 +5,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
 import { expect, test } from 'bun:test';
 
-import { parseJsonc } from '../../../src/firebat-config.loader';
 import { runInstall, runUpdate } from '../../../src/adapters/cli/install';
 
 const sha256Hex = (text: string): string => {
@@ -61,7 +60,7 @@ const createTmpProjectRoot = async (): Promise<string> => {
 
 const readJsonFile = async (filePath: string): Promise<unknown> => {
   const text = await Bun.file(filePath).text();
-  return JSON.parse(text) as unknown;
+  return Bun.JSONC.parse(text) as unknown;
 };
 
 const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
@@ -188,7 +187,7 @@ test('should apply template changes when user matches base', async () => {
 
     const templatePath = path.resolve(import.meta.dir, '../../../assets/.firebatrc.jsonc');
     const templateText = await Bun.file(templatePath).text();
-    const templateParsed = parseJsonc(templateText);
+    const templateParsed = Bun.JSONC.parse(templateText);
 
     const keyToRemove = findFirstKey(templateParsed);
 
@@ -225,7 +224,7 @@ test('should apply template changes when user matches base', async () => {
   }
 });
 
-test('should abort update on conflict and not write files', async () => {
+test('should not overwrite user-edited existing keys', async () => {
   // Arrange
   const tmpRootAbs = await createTmpProjectRoot();
   const originalCwd = process.cwd();
@@ -239,9 +238,13 @@ test('should abort update on conflict and not write files', async () => {
 
     expect(installResult.result).toBe(0);
 
+    const manifestPath = path.join(tmpRootAbs, '.firebat', 'install-manifest.json');
+    const manifestBeforeText = await Bun.file(manifestPath).text();
+    const manifest = JSON.parse(manifestBeforeText) as any;
+
     const templatePath = path.resolve(import.meta.dir, '../../../assets/.firebatrc.jsonc');
     const templateText = await Bun.file(templatePath).text();
-    const templateParsed = parseJsonc(templateText);
+    const templateParsed = Bun.JSONC.parse(templateText);
 
     const leaf = findFirstPrimitivePath(templateParsed);
     if (!leaf) {
@@ -251,17 +254,10 @@ test('should abort update on conflict and not write files', async () => {
     const baseParsed = cloneJson(templateParsed);
     const userParsed = cloneJson(templateParsed);
 
-    const templateValue = leaf.value;
-
-    const baseValue: Primitive = typeof templateValue === 'string' ? 'BASE' : typeof templateValue === 'number' ? templateValue + 1 : typeof templateValue === 'boolean' ? !templateValue : null;
-    const userValue: Primitive = typeof templateValue === 'string' ? 'USER' : typeof templateValue === 'number' ? templateValue + 2 : typeof templateValue === 'boolean' ? templateValue : 'USER';
-
-    setAtPath(baseParsed, leaf.path, baseValue);
-    setAtPath(userParsed, leaf.path, userValue);
-
-    const manifestPath = path.join(tmpRootAbs, '.firebat', 'install-manifest.json');
-    const manifestBeforeText = await Bun.file(manifestPath).text();
-    const manifest = JSON.parse(manifestBeforeText) as any;
+    // Ensure base snapshot differs (so update still has a base file to satisfy manifest requirements).
+    setAtPath(baseParsed, leaf.path, 'BASE');
+    // User edits an existing key; update must not overwrite it.
+    setAtPath(userParsed, leaf.path, 'USER');
 
     const baseText = jsonText(baseParsed);
     const baseSha = sha256Hex(baseText);
@@ -274,7 +270,9 @@ test('should abort update on conflict and not write files', async () => {
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
     const rcPath = path.join(tmpRootAbs, '.firebatrc.jsonc');
-    await Bun.write(rcPath, jsonText(userParsed));
+    // Keep JSONC with a comment that must survive update (no rewrite when no keyset changes).
+    const userRcText = `// user comment\n${jsonText(userParsed)}`;
+    await Bun.write(rcPath, userRcText);
 
     const beforeRcText = await Bun.file(rcPath).text();
 
@@ -284,14 +282,64 @@ test('should abort update on conflict and not write files', async () => {
     });
 
     // Assert
-    expect(updateResult.result).toBe(1);
-    expect(updateResult.errors.join('\n')).toContain('conflict');
+    expect(updateResult.result).toBe(0);
 
     const afterRcText = await Bun.file(rcPath).text();
+    // No key additions/removals => file should not be rewritten (comments preserved).
     expect(afterRcText).toBe(beforeRcText);
 
-    const manifestAfterText = await Bun.file(manifestPath).text();
-    expect(manifestAfterText).toBe(JSON.stringify(manifest, null, 2) + '\n');
+    const afterParsed = Bun.JSONC.parse(afterRcText) as any;
+    // User value should remain.
+    const afterLeaf = findFirstPrimitivePath(afterParsed);
+    expect(afterLeaf?.value).toBe('USER');
+
+  } finally {
+    process.chdir(originalCwd);
+    await rm(tmpRootAbs, { recursive: true, force: true });
+  }
+});
+
+test('should delete keys missing from template even if user added them', async () => {
+  // Arrange
+  const tmpRootAbs = await createTmpProjectRoot();
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(tmpRootAbs);
+
+    const installResult = await withCapturedConsole(async () => {
+      return await runInstall([]);
+    });
+
+    expect(installResult.result).toBe(0);
+
+    const rcPath = path.join(tmpRootAbs, '.firebatrc.jsonc');
+    const rcText = await Bun.file(rcPath).text();
+    const parsed = Bun.JSONC.parse(rcText) as any;
+
+    // Inject extra keys (root + nested) that are not present in the template.
+    parsed.__extraRootKey = 123;
+    if (parsed.features && typeof parsed.features === 'object') {
+      parsed.features.__extraFeatureKey = true;
+    }
+
+    await Bun.write(rcPath, `// keep me\n${jsonText(parsed)}`);
+
+    // Act
+    const updateResult = await withCapturedConsole(async () => {
+      return await runUpdate([]);
+    });
+
+    // Assert
+    expect(updateResult.result).toBe(0);
+
+    const afterText = await Bun.file(rcPath).text();
+    const after = Bun.JSONC.parse(afterText) as any;
+
+    expect(after.__extraRootKey).toBeUndefined();
+    expect(after.features?.__extraFeatureKey).toBeUndefined();
+    // Unrelated comment should remain unless update had to rewrite.
+    expect(afterText).toContain('// keep me');
   } finally {
     process.chdir(originalCwd);
     await rm(tmpRootAbs, { recursive: true, force: true });

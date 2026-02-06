@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
+import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noDynamicImportRule } from './no-dynamic-import';
 
 describe('no-dynamic-import', () => {

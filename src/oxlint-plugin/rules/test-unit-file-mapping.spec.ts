@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../test/utils/rule-test-kit';
-import { createVirtualFs } from '../test/utils/virtual-fs';
+import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testUnitFileMappingRule } from './test-unit-file-mapping';
 
 function createProgram(body: AstNode[]): AstNode {

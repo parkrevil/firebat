@@ -1,9 +1,10 @@
 import * as path from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
-import { parseJsonc } from '../../firebat-config.loader';
+
+import { syncFirebatRcJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
@@ -117,9 +118,18 @@ const sortJsonValue = (value: JsonValue): JsonValue => {
 
 const jsonText = (value: JsonValue): string => JSON.stringify(sortJsonValue(value), null, 2) + '\n';
 
+const writeFileAtomic = async (filePath: string, text: string): Promise<void> => {
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath);
+  const tmpPath = path.join(dir, `.${base}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+  await Bun.write(tmpPath, text);
+  await rename(tmpPath, filePath);
+};
+
 const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
   try {
-    return toJsonValue(parseJsonc(text));
+    return toJsonValue(Bun.JSONC.parse(text));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${msg}`);
@@ -233,6 +243,8 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.oxfmtrc.jsonc', dest: '.oxfmtrc.jsonc' },
   { asset: '.firebatrc.jsonc', dest: '.firebatrc.jsonc' },
 ];
+
+const isFirebatRcAsset = (asset: string): boolean => asset === '.firebatrc.jsonc';
 
 const deepEqualMaybe = (a: JsonMaybe, b: JsonMaybe): boolean => {
   if (a === undefined && b === undefined) return true;
@@ -410,27 +422,52 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
         const baseText = await baseFile.text();
         const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        const baseParsed = parseJsoncOrThrow(basePath, baseText);
+        void baseText;
 
         const destFile = Bun.file(tpl.destAbs);
         const userText = (await destFile.exists()) ? await destFile.text() : null;
-        const userParsed = userText === null ? undefined : parseJsoncOrThrow(tpl.destAbs, userText);
 
-        const merged = merge3({ base: baseParsed, user: userParsed, next: nextParsed, path: [] });
-        if (!merged.ok) {
-          console.error(explainConflict(tpl.destAbs, merged.conflicts));
-          return 1;
-        }
+        if (isFirebatRcAsset(tpl.asset)) {
+          if (userText === null) {
+            plannedWrites.push({ filePath: tpl.destAbs, text: tpl.templateText });
+          } else {
+            // Validate current file first.
+            const userParsed = parseJsoncOrThrow(tpl.destAbs, userText);
+            void userParsed;
 
-        const mergedValue = merged.value;
-        if (mergedValue === undefined) {
-          console.error(explainConflict(tpl.destAbs, [{ path: '<root>', base: baseParsed, user: userParsed, template: nextParsed }]));
-          return 1;
-        }
+            const synced = syncFirebatRcJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
+            if (!synced.ok) {
+              console.error(`[firebat] update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
+              return 1;
+            }
 
-        // Compare semantic equality to avoid rewriting identical content.
-        if (userParsed === undefined || !deepEqual(userParsed, mergedValue)) {
-          plannedWrites.push({ filePath: tpl.destAbs, text: jsonText(mergedValue) });
+            // Validate patched result.
+            void parseJsoncOrThrow(tpl.destAbs, synced.text);
+
+            if (synced.changed) {
+              plannedWrites.push({ filePath: tpl.destAbs, text: synced.text });
+            }
+          }
+        } else {
+          const userParsed = userText === null ? undefined : parseJsoncOrThrow(tpl.destAbs, userText);
+          const baseParsed = parseJsoncOrThrow(basePath, baseText);
+
+          const merged = merge3({ base: baseParsed, user: userParsed, next: nextParsed, path: [] });
+          if (!merged.ok) {
+            console.error(explainConflict(tpl.destAbs, merged.conflicts));
+            return 1;
+          }
+
+          const mergedValue = merged.value;
+          if (mergedValue === undefined) {
+            console.error(explainConflict(tpl.destAbs, [{ path: '<root>', base: baseParsed, user: userParsed, template: nextParsed }]));
+            return 1;
+          }
+
+          // Compare semantic equality to avoid rewriting identical content.
+          if (userParsed === undefined || !deepEqual(userParsed, mergedValue)) {
+            plannedWrites.push({ filePath: tpl.destAbs, text: jsonText(mergedValue) });
+          }
         }
 
         const nextNormalized = jsonText(nextParsed);
@@ -441,7 +478,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
       // Apply writes.
       for (const w of plannedWrites) {
-        await Bun.write(w.filePath, w.text);
+        await writeFileAtomic(w.filePath, w.text);
         assetResults.push({ kind: 'installed', filePath: w.filePath, desiredSha256: await sha256Hex(w.text) });
       }
 
@@ -466,10 +503,11 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         baseSnapshots[tpl.asset] = base;
 
         const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        const desiredText = jsonText(desiredParsed);
+        const desiredNormalized = jsonText(desiredParsed);
+        const desiredInstalled = isFirebatRcAsset(tpl.asset) ? tpl.templateText : desiredNormalized;
 
-        assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredText) };
-        assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredText));
+        assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
+        assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredInstalled));
       }
     }
 
