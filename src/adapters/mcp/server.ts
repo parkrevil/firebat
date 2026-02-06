@@ -59,11 +59,13 @@ import * as path from 'node:path';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
 import type { FirebatConfig } from '../../firebat-config';
+import { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../features/unknown-proof/analyzer';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
+  'unknown-proof',
   'lint',
   'typecheck',
   'dependencies',
@@ -118,6 +120,29 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
   }
 
   return forwarding.maxForwardDepth;
+};
+
+const resolveUnknownProofBoundaryGlobsFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): ReadonlyArray<string> | undefined => {
+  const value = (features as any)?.['unknown-proof'];
+
+  if (value === undefined || value === false) {
+    return undefined;
+  }
+
+  if (value === true) {
+    return DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const boundaryGlobs = (value as any).boundaryGlobs;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
+      ? boundaryGlobs
+      : DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+  }
+
+  return undefined;
 };
 
 const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['features'] | undefined => {
@@ -266,6 +291,7 @@ const runMcpServer = async (): Promise<void> => {
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
+      const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(effectiveFeatures);
       const options: FirebatCliOptions = {
         targets,
         format: 'json',
@@ -273,6 +299,7 @@ const runMcpServer = async (): Promise<void> => {
         maxForwardDepth: args.maxForwardDepth ?? cfgMaxForwardDepth ?? 0,
         exitOnFindings: false,
         detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
+        ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
         help: false,
       };
       const report = await scanUseCase(options);

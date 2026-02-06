@@ -1,0 +1,194 @@
+import type { ParsedFile } from '../../engine/types';
+import type { SourceSpan, UnknownProofFinding } from '../../types';
+
+import { withTsgoLspSession, openTsDocument } from '../../infrastructure/tsgo/tsgo-runner';
+
+import { stringifyHover } from './candidates';
+
+type BindingCandidate = {
+	readonly name: string;
+	readonly offset: number;
+	readonly span: SourceSpan;
+};
+
+type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
+
+type BoundaryUsageCandidate = {
+	readonly name: string;
+	readonly offset: number;
+	readonly span: SourceSpan;
+	readonly usageKind: BoundaryUsageKind;
+};
+
+const createEmptySpan = (): SourceSpan => ({
+	start: { line: 1, column: 1 },
+	end: { line: 1, column: 1 },
+});
+
+const pickTypeSnippetFromHoverText = (text: string): string => {
+	if (text.trim().length === 0) {
+		return '';
+	}
+
+	const block = /```(?:typescript|ts)?\s*([\s\S]*?)```/m.exec(text);
+	const body = (block?.[1] ?? text).trim();
+	const lines = body.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+	return (lines[0] ?? '').slice(0, 200);
+};
+
+const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(text);
+
+const shouldFlagUnknownOrAny = (hoverText: string): { unknown: boolean; any: boolean; typeSnippet: string } => {
+	const snippet = pickTypeSnippetFromHoverText(hoverText);
+	const haystack = snippet.length > 0 ? snippet : hoverText;
+
+	return {
+		unknown: hasWord(haystack, 'unknown'),
+		any: hasWord(haystack, 'any'),
+		typeSnippet: snippet,
+	};
+};
+
+const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): { message: string; evidence: string } => {
+	if (kind === 'call') {
+		return { message: 'Boundary `unknown` is passed without narrowing', evidence: 'propagation=call' };
+	}
+	if (kind === 'assign') {
+		return { message: 'Boundary `unknown` is assigned without narrowing', evidence: 'propagation=assign' };
+	}
+	if (kind === 'store') {
+		return { message: 'Boundary `unknown` is stored without narrowing', evidence: 'propagation=store' };
+	}
+	if (kind === 'return') {
+		return { message: 'Boundary `unknown` is returned without narrowing', evidence: 'propagation=return' };
+	}
+	return { message: 'Boundary `unknown` is thrown without narrowing', evidence: 'propagation=throw' };
+};
+
+export const runTsgoUnknownProofChecks = async (input: {
+	program: ReadonlyArray<ParsedFile>;
+	rootAbs: string;
+	candidatesByFile: ReadonlyMap<string, ReadonlyArray<BindingCandidate>>;
+	boundaryUsageCandidatesByFile?: ReadonlyMap<string, ReadonlyArray<BoundaryUsageCandidate>>;
+	tsconfigPath?: string;
+}): Promise<{ ok: true; findings: ReadonlyArray<UnknownProofFinding> } | { ok: false; error: string; findings: ReadonlyArray<UnknownProofFinding> } > => {
+	const rootAbs = input.rootAbs;
+	const fileByPath = new Map<string, ParsedFile>();
+
+	for (const file of input.program) {
+		fileByPath.set(file.filePath, file);
+	}
+
+	const result = await withTsgoLspSession<ReadonlyArray<UnknownProofFinding>>(
+		{ root: rootAbs, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
+		async session => {
+			const findings: UnknownProofFinding[] = [];
+
+			const filePaths = new Set<string>();
+			for (const filePath of input.candidatesByFile.keys()) filePaths.add(filePath);
+			for (const filePath of input.boundaryUsageCandidatesByFile?.keys() ?? []) filePaths.add(filePath);
+
+			for (const filePath of filePaths) {
+				const file = fileByPath.get(filePath);
+
+				if (!file) {
+					continue;
+				}
+
+				const outsideCandidates = input.candidatesByFile.get(filePath) ?? [];
+				const boundaryUsageCandidates = input.boundaryUsageCandidatesByFile?.get(filePath) ?? [];
+
+				if (outsideCandidates.length === 0 && boundaryUsageCandidates.length === 0) {
+					continue;
+				}
+
+				const { uri } = await openTsDocument({ lsp: session.lsp, filePath, text: file.sourceText });
+
+				// Give tsgo a moment to process.
+				await new Promise<void>(r => setTimeout(r, 150));
+
+				try {
+					for (const candidate of outsideCandidates) {
+						const line0 = Math.max(0, candidate.span.start.line - 1);
+						const character0 = Math.max(0, candidate.span.start.column);
+						const hover = await session.lsp.request('textDocument/hover', {
+							textDocument: { uri },
+							position: { line: line0, character: character0 },
+						});
+						const hoverText = stringifyHover(hover);
+						const flag = shouldFlagUnknownOrAny(hoverText);
+
+						if (flag.unknown) {
+							findings.push({
+								kind: 'unknown-inferred',
+								message: 'Type is (or contains) `unknown` outside boundary files',
+								filePath,
+								span: candidate.span,
+								symbol: candidate.name,
+								...(flag.typeSnippet.length > 0 ? { typeText: flag.typeSnippet } : {}),
+							});
+						}
+
+						if (flag.any) {
+							findings.push({
+								kind: 'any-inferred',
+								message: 'Type is (or contains) `any` outside boundary files',
+								filePath,
+								span: candidate.span,
+								symbol: candidate.name,
+								...(flag.typeSnippet.length > 0 ? { typeText: flag.typeSnippet } : {}),
+							});
+						}
+					}
+
+					for (const candidate of boundaryUsageCandidates) {
+						const line0 = Math.max(0, candidate.span.start.line - 1);
+						const character0 = Math.max(0, candidate.span.start.column);
+						const hover = await session.lsp.request('textDocument/hover', {
+							textDocument: { uri },
+							position: { line: line0, character: character0 },
+						});
+						const hoverText = stringifyHover(hover);
+						const flag = shouldFlagUnknownOrAny(hoverText);
+
+						if (flag.unknown) {
+							const msg = formatBoundaryUnknownMessage(candidate.usageKind);
+							findings.push({
+								kind: 'unvalidated-unknown',
+								message: msg.message,
+								filePath,
+								span: candidate.span,
+								symbol: candidate.name,
+								evidence: msg.evidence,
+								...(flag.typeSnippet.length > 0 ? { typeText: flag.typeSnippet } : {}),
+							});
+						}
+					}
+				} finally {
+					await session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined);
+				}
+			}
+
+			return findings;
+		},
+	);
+
+	if (!result.ok) {
+		return {
+			ok: false,
+			error: result.error,
+			findings: [
+				{
+					kind: 'tool-unavailable',
+					message: 'tsgo is unavailable; unknown-proof cannot be proven',
+					filePath: rootAbs,
+					span: createEmptySpan(),
+					...(result.error.length > 0 ? { evidence: result.error.slice(0, 300) } : {}),
+				},
+			],
+		};
+	}
+
+	return { ok: true, findings: result.value };
+};

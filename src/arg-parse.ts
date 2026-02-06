@@ -10,6 +10,7 @@ const DEFAULT_MAX_FORWARD_DEPTH = 0;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
+  'unknown-proof',
   'lint',
   'typecheck',
   'dependencies',
@@ -73,6 +74,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
     if (
       selection !== 'exact-duplicates' &&
       selection !== 'waste' &&
+      selection !== 'unknown-proof' &&
       selection !== 'lint' &&
       selection !== 'typecheck' &&
       selection !== 'dependencies' &&
@@ -85,7 +87,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'forwarding'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|unknown-proof|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
       );
     }
 
@@ -124,7 +126,29 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let configPath: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
 
-  const explicit: FirebatCliExplicitFlags = {
+  type ExplicitMutable = {
+    format: boolean;
+    minSize: boolean;
+    maxForwardDepth: boolean;
+    exitOnFindings: boolean;
+    detectors: boolean;
+    configPath: boolean;
+    logLevel: boolean;
+  };
+
+  const toExplicitFlags = (input: ExplicitMutable): FirebatCliExplicitFlags => {
+    return {
+      format: input.format,
+      minSize: input.minSize,
+      maxForwardDepth: input.maxForwardDepth,
+      exitOnFindings: input.exitOnFindings,
+      detectors: input.detectors,
+      configPath: input.configPath,
+      logLevel: input.logLevel,
+    };
+  };
+
+  const explicit: ExplicitMutable = {
     format: false,
     minSize: false,
     maxForwardDepth: false,
@@ -152,7 +176,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         help: true,
         ...(configPath !== undefined ? { configPath } : {}),
         ...(logLevel !== undefined ? { logLevel } : {}),
-        explicit,
+        explicit: toExplicitFlags(explicit),
       };
     }
 
@@ -266,7 +290,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     help: false,
     ...(configPath !== undefined ? { configPath } : {}),
     ...(logLevel !== undefined ? { logLevel } : {}),
-    explicit,
+    explicit: toExplicitFlags(explicit),
   };
 };
 

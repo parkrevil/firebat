@@ -30,9 +30,14 @@ export interface FirebatForwardingConfig {
 	readonly maxForwardDepth?: number | undefined;
 }
 
+export interface FirebatUnknownProofConfig {
+	readonly boundaryGlobs?: ReadonlyArray<string> | undefined;
+}
+
 export interface FirebatFeaturesConfig {
 	readonly 'exact-duplicates'?: FeatureToggle<FirebatExactDuplicatesConfig> | undefined;
 	readonly waste?: boolean | undefined;
+	readonly 'unknown-proof'?: FeatureToggle<FirebatUnknownProofConfig> | undefined;
 	readonly lint?: boolean | undefined;
 	readonly typecheck?: boolean | undefined;
 	readonly dependencies?: boolean | undefined;
@@ -48,6 +53,7 @@ export interface FirebatFeaturesConfig {
 export interface FirebatMcpFeaturesConfig {
 	readonly 'exact-duplicates'?: InheritableFeatureToggle<FirebatExactDuplicatesConfig> | undefined;
 	readonly waste?: boolean | 'inherit' | undefined;
+	readonly 'unknown-proof'?: InheritableFeatureToggle<FirebatUnknownProofConfig> | undefined;
 	readonly lint?: boolean | 'inherit' | undefined;
 	readonly typecheck?: boolean | 'inherit' | undefined;
 	readonly dependencies?: boolean | 'inherit' | undefined;
@@ -105,6 +111,17 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 					])
 					.optional(),
 				waste: z.boolean().optional(),
+				'unknown-proof': z
+					.union([
+						z.literal(false),
+						z.literal(true),
+						z
+							.object({
+								boundaryGlobs: z.array(z.string()).nonempty().optional(),
+							})
+							.strict(),
+					])
+					.optional(),
 				lint: z.boolean().optional(),
 				typecheck: z.boolean().optional(),
 				dependencies: z.boolean().optional(),
@@ -158,6 +175,18 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 									])
 									.optional(),
 								waste: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+								'unknown-proof': z
+									.union([
+										z.literal(false),
+										z.literal('inherit'),
+										z.literal(true),
+										z
+											.object({
+												boundaryGlobs: z.array(z.string()).nonempty().optional(),
+											})
+											.strict(),
+									])
+									.optional(),
 								lint: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
 								typecheck: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
 								dependencies: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),

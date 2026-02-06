@@ -15,6 +15,7 @@ import type {
   NoopFinding,
   OutputFormat,
   TypecheckItem,
+  UnknownProofFinding,
   WasteFinding,
 } from './types';
 
@@ -201,21 +202,48 @@ const formatLintText = (analysis: LintAnalysis): string => {
   return `[lint] tool=${analysis.tool} status=${analysis.status} diagnostics=${total} errors=${errors}`;
 };
 
+const formatUnknownProofFindingText = (finding: UnknownProofFinding): string => {
+  const rel = path.relative(process.cwd(), finding.filePath);
+  const start = toPos(finding.span.start.line, finding.span.start.column);
+  const symbol = typeof finding.symbol === 'string' && finding.symbol.length > 0 ? ` symbol=${finding.symbol}` : '';
+  const typeText = typeof finding.typeText === 'string' && finding.typeText.length > 0 ? ` type=${finding.typeText}` : '';
+  const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? ` evidence=${finding.evidence}` : '';
+
+  return `  - ${finding.kind}: ${finding.message} @ ${rel}:${start}${symbol}${typeText}${evidence}`;
+};
+
 const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const detectors = report.meta.detectors.join(',');
   const duplicates = report.analyses['exact-duplicates'];
   const waste = report.analyses.waste;
+  const unknownProof = report.analyses.unknownProof;
   const lint = report.analyses.lint;
   const selectedDetectors = new Set(report.meta.detectors);
   const typecheckItems = report.analyses.typecheck.items;
   const typecheckErrors = typecheckItems.filter(item => item.severity === 'error').length;
   const typecheckWarnings = typecheckItems.filter(item => item.severity === 'warning').length;
   const lintErrors = lint.diagnostics.filter(d => d.severity === 'error').length;
+  const unknownProofFindings = unknownProof.findings.length;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
   );
+
+  if (selectedDetectors.has('unknown-proof')) {
+    const defaultBoundaryGlobs = 'src/adapters/**,src/infrastructure/**';
+    lines.push(`[unknown-proof] status=${unknownProof.status} tool=${unknownProof.tool} findings=${unknownProof.findings.length}`);
+    lines.push(
+      `[unknown-proof] rules=no-type-assertion; no-explicit-unknown-outside-boundary; boundary-unknown-must-narrow-before-propagation; no-inferred-unknown/any-outside-boundary(tsgo)`
+    );
+    lines.push(
+      `[unknown-proof] boundaryGlobs=config.features["unknown-proof"].boundaryGlobs (default=${defaultBoundaryGlobs})`
+    );
+
+    if (typeof unknownProof.error === 'string' && unknownProof.error.length > 0) {
+      lines.push(`[unknown-proof] error=${unknownProof.error}`);
+    }
+  }
 
   if (selectedDetectors.has('lint')) {
     lines.push(formatLintText(report.analyses.lint));
@@ -267,6 +295,29 @@ const formatText = (report: FirebatReport): string => {
   for (const finding of waste) {
     lines.push('');
     lines.push(formatWasteText(finding));
+  }
+
+  if (selectedDetectors.has('unknown-proof')) {
+    const findings = report.analyses.unknownProof.findings;
+    const byKind = new Map<string, number>();
+
+    for (const f of findings) {
+      byKind.set(f.kind, (byKind.get(f.kind) ?? 0) + 1);
+    }
+
+    const kindSummary = [...byKind.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k}=${v}`)
+      .join(' ');
+
+    lines.push('');
+    lines.push(
+      `[unknown-proof] findings=${findings.length} status=${report.analyses.unknownProof.status}${kindSummary.length > 0 ? ` kinds=${kindSummary}` : ''}`,
+    );
+
+    for (const finding of findings) {
+      lines.push(formatUnknownProofFindingText(finding));
+    }
   }
 
   if (selectedDetectors.has('typecheck')) {

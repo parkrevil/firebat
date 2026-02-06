@@ -18,10 +18,12 @@ interface ComputeScanArtifactKeyInput {
   readonly detectors: ReadonlyArray<string>;
   readonly minSize: string;
   readonly maxForwardDepth: number;
+  readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
 }
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
+  const normalizedUnknownProofBoundaryGlobs = input.unknownProofBoundaryGlobs ? [...input.unknownProofBoundaryGlobs].sort() : [];
 
   return hashString(
     [
@@ -29,6 +31,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `detectors=${normalizedDetectors.join(',')}`,
       `minSize=${input.minSize}`,
       `maxForwardDepth=${String(input.maxForwardDepth)}`,
+      `unknownProofBoundaryGlobs=${normalizedUnknownProofBoundaryGlobs.join(',')}`,
     ].join('|'),
   );
 };

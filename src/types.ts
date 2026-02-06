@@ -7,6 +7,7 @@ export type MinSizeOption = number | 'auto';
 export type FirebatDetector =
   | 'exact-duplicates'
   | 'waste'
+  | 'unknown-proof'
   | 'lint'
   | 'typecheck'
   | 'dependencies'
@@ -256,6 +257,33 @@ export interface TypecheckAnalysis {
   readonly items: ReadonlyArray<TypecheckItem>;
 }
 
+export type UnknownProofStatus = 'ok' | 'unavailable' | 'failed';
+
+export type UnknownProofFindingKind =
+  | 'tool-unavailable'
+  | 'type-assertion'
+  | 'unknown-type'
+  | 'unvalidated-unknown'
+  | 'unknown-inferred'
+  | 'any-inferred';
+
+export interface UnknownProofFinding {
+  readonly kind: UnknownProofFindingKind;
+  readonly message: string;
+  readonly filePath: string;
+  readonly span: SourceSpan;
+  readonly symbol?: string;
+  readonly evidence?: string;
+  readonly typeText?: string;
+}
+
+export interface UnknownProofAnalysis {
+  readonly status: UnknownProofStatus;
+  readonly tool: 'tsgo';
+  readonly error?: string;
+  readonly findings: ReadonlyArray<UnknownProofFinding>;
+}
+
 export interface FirebatMeta {
   readonly engine: 'oxc';
   readonly version: string;
@@ -268,6 +296,7 @@ export interface FirebatMeta {
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
+  readonly unknownProof: UnknownProofAnalysis;
   readonly lint: LintAnalysis;
   readonly typecheck: TypecheckAnalysis;
   readonly dependencies: DependencyAnalysis;

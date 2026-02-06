@@ -9,13 +9,14 @@ import { scanUseCase } from '../../application/scan/scan.usecase';
 import { appendFirebatLog } from '../../infra/logging';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
+import { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../features/unknown-proof';
 
 const LOG_LEVELS = ['silent', 'error', 'warn', 'info'] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
 
 const shouldLog = (level: LogLevel, threshold: LogLevel): boolean => {
   if (threshold === 'silent') return false;
-  if (level === 'error') return threshold !== 'silent';
+  if (level === 'error') return true;
   if (level === 'warn') return threshold === 'warn' || threshold === 'info';
   return threshold === 'info';
 };
@@ -56,7 +57,8 @@ const printHelp = (): void => {
     '  --format text|json       Output format (default: text)',
     '  --min-size <n|auto>      Minimum size threshold for duplicates (default: auto)',
     '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
-    '  --only <list>            Limit detectors to exact-duplicates,waste,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
+    '  --only <list>            Limit detectors to exact-duplicates,waste,unknown-proof,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
+    '  (config) unknown-proof   Configure boundary globs via features["unknown-proof"].boundaryGlobs (default: src/adapters/**, src/infrastructure/**)',
     '  --config <path>          Config file path (default: <root>/.firebatrc.jsonc)',
     '  --log-level <level>      silent|error|warn|info (default: error)',
     '  --no-exit                Always exit 0 even if findings exist',
@@ -70,10 +72,12 @@ const countBlockingFindings = (report: FirebatReport): number => {
   const typecheckErrors = report.analyses.typecheck.items.filter(item => item.severity === 'error').length;
   const forwardingFindings = report.analyses.forwarding.findings.length;
   const lintErrors = report.analyses.lint.diagnostics.filter(item => item.severity === 'error').length;
+  const unknownProofFindings = report.analyses.unknownProof.findings.length;
 
   return (
     report.analyses['exact-duplicates'].length +
     report.analyses.waste.length +
+    unknownProofFindings +
     lintErrors +
     typecheckErrors +
     forwardingFindings
@@ -84,6 +88,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
   const all: ReadonlyArray<FirebatDetector> = [
     'exact-duplicates',
     'waste',
+    'unknown-proof',
     'lint',
     'typecheck',
     'dependencies',
@@ -104,6 +109,29 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     const value = (features as any)[detector];
     return value !== false;
   });
+};
+
+const resolveUnknownProofBoundaryGlobsFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): ReadonlyArray<string> | undefined => {
+  const value = (features as any)?.['unknown-proof'];
+
+  if (value === undefined || value === false) {
+    return undefined;
+  }
+
+  if (value === true) {
+    return DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const boundaryGlobs = (value as any).boundaryGlobs;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
+      ? boundaryGlobs
+      : DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS;
+  }
+
+  return undefined;
 };
 
 const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): FirebatCliOptions['minSize'] | undefined => {
@@ -149,6 +177,7 @@ const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOption
   const cfgDetectors = resolveEnabledDetectorsFromFeatures(featuresCfg);
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
+  const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
 
   const merged: FirebatCliOptions = {
     ...options,
@@ -162,6 +191,7 @@ const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOption
     ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
     ...(options.explicit?.logLevel ? {} : loggingCfg?.level !== undefined ? { logLevel: loggingCfg.level } : {}),
+    ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
     configPath: loaded.resolvedPath,
   };
 
@@ -224,7 +254,10 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
       let logPath = '.firebat/cli-error.log';
 
       try {
-        const loaded = await loadFirebatConfigFile({ rootAbs, configPath: options.configPath });
+        const loaded = await loadFirebatConfigFile({
+          rootAbs,
+          ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
+        });
         const filePath = loaded.config?.logging?.filePath;
 
         if (typeof filePath === 'string' && filePath.trim().length > 0) {

@@ -19,6 +19,7 @@ describe('arg-parse', () => {
     expect(result.detectors).toEqual([
       'exact-duplicates',
       'waste',
+      'unknown-proof',
       'lint',
       'typecheck',
       'dependencies',
@@ -50,6 +51,7 @@ describe('arg-parse', () => {
     expect(result.detectors).toEqual([
       'exact-duplicates',
       'waste',
+      'unknown-proof',
       'lint',
       'typecheck',
       'dependencies',
@@ -78,6 +80,7 @@ describe('arg-parse', () => {
     expect(result.detectors).toEqual([
       'exact-duplicates',
       'waste',
+      'unknown-proof',
       'lint',
       'typecheck',
       'dependencies',

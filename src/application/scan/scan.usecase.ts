@@ -12,6 +12,7 @@ import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
 import { analyzeNoop, createEmptyNoop } from '../../features/noop';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
+import { analyzeUnknownProof, createEmptyUnknownProof, DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../features/unknown-proof';
 import { detectExactDuplicates } from '../../features/exact-duplicates';
 import { detectWaste } from '../../features/waste';
 import { computeAutoMinSize } from '../../engine/auto-min-size';
@@ -72,6 +73,9 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
+    ...(options.detectors.includes('unknown-proof')
+      ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS }
+      : {}),
   });
   const cached = await artifactRepository.getArtifact<FirebatReport>({
     projectKey,
@@ -91,6 +95,12 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
   const exactDuplicates = options.detectors.includes('exact-duplicates') ? detectExactDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
+  const unknownProof = options.detectors.includes('unknown-proof')
+    ? await analyzeUnknownProof(program, {
+        rootAbs: ctx.rootAbs,
+        boundaryGlobs: options.unknownProofBoundaryGlobs ?? DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+      })
+    : createEmptyUnknownProof();
   const lint = options.detectors.includes('lint') ? await analyzeLint(options.targets) : createEmptyLint();
   const typecheck = options.detectors.includes('typecheck') ? await analyzeTypecheck(program) : createEmptyTypecheck();
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
@@ -118,6 +128,7 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     analyses: {
       'exact-duplicates': exactDuplicates,
       waste,
+      unknownProof,
       lint,
       typecheck,
       dependencies,
