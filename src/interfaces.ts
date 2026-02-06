@@ -7,6 +7,7 @@ export interface FirebatCliExplicitFlags {
   readonly maxForwardDepth: boolean;
   readonly exitOnFindings: boolean;
   readonly detectors: boolean;
+  readonly fix: boolean;
   readonly configPath: boolean;
   readonly logLevel: boolean;
 }
@@ -18,6 +19,7 @@ export interface FirebatCliOptions {
   readonly maxForwardDepth: number;
   readonly exitOnFindings: boolean;
   readonly detectors: ReadonlyArray<FirebatDetector>;
+  readonly fix: boolean;
   readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
   readonly help: boolean;
   readonly configPath?: string;

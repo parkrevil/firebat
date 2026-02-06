@@ -24,6 +24,7 @@ interface OxlintRunResult {
 interface RunOxlintInput {
   readonly targets: ReadonlyArray<string>;
   readonly configPath?: string;
+  readonly fix?: boolean;
 }
 
 const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
@@ -132,6 +133,13 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     args.push('--config', input.configPath);
   }
 
+  // Machine-readable diagnostics.
+  args.push('-f', 'json');
+
+  if (input.fix === true) {
+    args.push('--fix');
+  }
+
   // NOTE: oxlint JSON output flags may differ by version. For now, treat stdout/stderr as raw,
   // but if stdout is valid JSON, attempt best-effort normalization.
   args.push(...input.targets);
@@ -149,27 +157,35 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     proc.exited,
   ]);
 
-  if (exitCode !== 0) {
-    return { ok: false, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, error: `oxlint exited with code ${exitCode}` };
-  }
+  const parseDiagnostics = (text: string): ReadonlyArray<OxlintDiagnostic> => {
+    const trimmed = text.trim();
 
-  const trimmed = stdout.trim();
+    if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+      return [];
+    }
 
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const parsed = OxlintOutputSchema.safeParse(JSON.parse(trimmed));
-
-      if (parsed.success) {
-        const diagnostics = normalizeDiagnosticsFromParsed(parsed.data);
-
-        return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics };
-      }
+      return parsed.success ? normalizeDiagnosticsFromParsed(parsed.data) : [];
     } catch {
-      // fallthrough
+      return [];
     }
-  }
+  };
 
-  return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics: [] };
+  const stdoutDiagnostics = parseDiagnostics(stdout);
+  const diagnostics = stdoutDiagnostics.length > 0 ? stdoutDiagnostics : parseDiagnostics(stderr);
+
+  // Non-zero exit codes are expected when lint findings exist. Treat the run as successful
+  // as long as the tool executed.
+  return {
+    ok: true,
+    tool: 'oxlint',
+    exitCode,
+    rawStdout: stdout,
+    rawStderr: stderr,
+    diagnostics,
+    ...(exitCode !== 0 ? { error: `oxlint exited with code ${exitCode}` } : {}),
+  };
 };
 
 export { runOxlint };

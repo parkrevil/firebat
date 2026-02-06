@@ -4,13 +4,11 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 
-import { syncFirebatRcJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
+import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
-
-type JsonMaybe = JsonValue | undefined;
 
 interface AssetTemplateMeta {
   readonly sourcePath: string;
@@ -244,108 +242,6 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.firebatrc.jsonc', dest: '.firebatrc.jsonc' },
 ];
 
-const isFirebatRcAsset = (asset: string): boolean => asset === '.firebatrc.jsonc';
-
-const deepEqualMaybe = (a: JsonMaybe, b: JsonMaybe): boolean => {
-  if (a === undefined && b === undefined) return true;
-  if (a === undefined || b === undefined) return false;
-  return deepEqual(a, b);
-};
-
-const toJsonPreview = (value: JsonMaybe): string => {
-  if (value === undefined) return '<missing>';
-  try {
-    const json = JSON.stringify(sortJsonValue(value));
-    if (json.length <= 240) return json;
-    return `${json.slice(0, 240)}…`;
-  } catch {
-    return '<unstringifiable>';
-  }
-};
-
-interface MergeConflict {
-  readonly path: string;
-  readonly base: JsonMaybe;
-  readonly user: JsonMaybe;
-  readonly template: JsonMaybe;
-}
-
-const merge3 = (input: {
-  readonly base: JsonMaybe;
-  readonly user: JsonMaybe;
-  readonly next: JsonMaybe;
-  readonly path: readonly string[];
-}): { ok: true; value: JsonMaybe } | { ok: false; conflicts: MergeConflict[] } => {
-  const { base, user, next } = input;
-  const pathStr = input.path.length === 0 ? '<root>' : input.path.join('.');
-
-  if (deepEqualMaybe(user, next)) {
-    return { ok: true, value: user };
-  }
-
-  if (deepEqualMaybe(base, user)) {
-    return { ok: true, value: next };
-  }
-
-  if (deepEqualMaybe(base, next)) {
-    return { ok: true, value: user };
-  }
-
-  const baseIsObj = typeof base === 'object' && base !== null && base !== undefined && !Array.isArray(base);
-  const userIsObj = typeof user === 'object' && user !== null && user !== undefined && !Array.isArray(user);
-  const nextIsObj = typeof next === 'object' && next !== null && next !== undefined && !Array.isArray(next);
-
-  if (baseIsObj && userIsObj && nextIsObj) {
-    const keys = new Set<string>([...Object.keys(base as any), ...Object.keys(user as any), ...Object.keys(next as any)]);
-    const out: Record<string, JsonValue> = {};
-    const conflicts: MergeConflict[] = [];
-
-    for (const key of Array.from(keys).sort()) {
-      const b = (base as any)[key] as JsonMaybe;
-      const u = (user as any)[key] as JsonMaybe;
-      const n = (next as any)[key] as JsonMaybe;
-      const merged = merge3({ base: b, user: u, next: n, path: [...input.path, key] });
-
-      if (!merged.ok) {
-        conflicts.push(...merged.conflicts);
-        continue;
-      }
-
-      if (merged.value !== undefined) {
-        out[key] = merged.value;
-      }
-    }
-
-    if (conflicts.length > 0) {
-      return { ok: false, conflicts };
-    }
-
-    return { ok: true, value: out };
-  }
-
-  const baseIsArr = Array.isArray(base);
-  const userIsArr = Array.isArray(user);
-  const nextIsArr = Array.isArray(next);
-
-  if (baseIsArr && userIsArr && nextIsArr) {
-    return { ok: false, conflicts: [{ path: pathStr, base, user, template: next }] };
-  }
-
-  return { ok: false, conflicts: [{ path: pathStr, base, user, template: next }] };
-};
-
-const explainConflict = (filePath: string, conflicts: readonly MergeConflict[]): string => {
-  const lines = [`[firebat] update aborted: conflicts in ${filePath}`, '[firebat] A conflict means user+template both changed from base.'];
-  for (const c of conflicts) {
-    lines.push(`[firebat]  - ${c.path}`);
-    lines.push(`    base:     ${toJsonPreview(c.base)}`);
-    lines.push(`    user:     ${toJsonPreview(c.user)}`);
-    lines.push(`    template: ${toJsonPreview(c.template)}`);
-  }
-  lines.push('[firebat] Run `firebat install` to reset templates, then try again.');
-  return lines.join('\n');
-};
-
 const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[]): Promise<number> => {
   try {
     const { yes, help } = parseYesFlag(argv);
@@ -419,54 +315,28 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
           console.error(`[firebat] update aborted: base snapshot not found for ${tpl.asset}. Run \`firebat install\` first.`);
           return 1;
         }
-
-        const baseText = await baseFile.text();
         const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        void baseText;
 
         const destFile = Bun.file(tpl.destAbs);
         const userText = (await destFile.exists()) ? await destFile.text() : null;
 
-        if (isFirebatRcAsset(tpl.asset)) {
-          if (userText === null) {
-            plannedWrites.push({ filePath: tpl.destAbs, text: tpl.templateText });
-          } else {
-            // Validate current file first.
-            const userParsed = parseJsoncOrThrow(tpl.destAbs, userText);
-            void userParsed;
-
-            const synced = syncFirebatRcJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
-            if (!synced.ok) {
-              console.error(`[firebat] update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
-              return 1;
-            }
-
-            // Validate patched result.
-            void parseJsoncOrThrow(tpl.destAbs, synced.text);
-
-            if (synced.changed) {
-              plannedWrites.push({ filePath: tpl.destAbs, text: synced.text });
-            }
-          }
+        if (userText === null) {
+          plannedWrites.push({ filePath: tpl.destAbs, text: tpl.templateText });
         } else {
-          const userParsed = userText === null ? undefined : parseJsoncOrThrow(tpl.destAbs, userText);
-          const baseParsed = parseJsoncOrThrow(basePath, baseText);
+          // Validate current file first.
+          void parseJsoncOrThrow(tpl.destAbs, userText);
 
-          const merged = merge3({ base: baseParsed, user: userParsed, next: nextParsed, path: [] });
-          if (!merged.ok) {
-            console.error(explainConflict(tpl.destAbs, merged.conflicts));
+          const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
+          if (!synced.ok) {
+            console.error(`[firebat] update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
             return 1;
           }
 
-          const mergedValue = merged.value;
-          if (mergedValue === undefined) {
-            console.error(explainConflict(tpl.destAbs, [{ path: '<root>', base: baseParsed, user: userParsed, template: nextParsed }]));
-            return 1;
-          }
+          // Validate patched result.
+          void parseJsoncOrThrow(tpl.destAbs, synced.text);
 
-          // Compare semantic equality to avoid rewriting identical content.
-          if (userParsed === undefined || !deepEqual(userParsed, mergedValue)) {
-            plannedWrites.push({ filePath: tpl.destAbs, text: jsonText(mergedValue) });
+          if (synced.changed) {
+            plannedWrites.push({ filePath: tpl.destAbs, text: synced.text });
           }
         }
 
@@ -504,7 +374,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
         const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
         const desiredNormalized = jsonText(desiredParsed);
-        const desiredInstalled = isFirebatRcAsset(tpl.asset) ? tpl.templateText : desiredNormalized;
+        const desiredInstalled = tpl.templateText;
 
         assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
         assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredInstalled));

@@ -43,17 +43,6 @@ const scanWithGlob = async (cwd: string, patterns: ReadonlyArray<string>): Promi
   return uniqueSorted(matches);
 };
 
-const DEFAULT_SOURCE_PATTERNS: ReadonlyArray<string> = [
-  'src/**/*.ts',
-  'src/**/*.tsx',
-  'packages/**/src/**/*.ts',
-  'packages/**/src/**/*.tsx',
-  'examples/**/src/**/*.ts',
-  'examples/**/src/**/*.tsx',
-  'tooling/**/*.ts',
-  'verify/**/*.ts',
-];
-
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const shouldIncludeSourceFile = (filePath: string): boolean => {

@@ -20,6 +20,7 @@ describe('arg-parse', () => {
       'exact-duplicates',
       'waste',
       'unknown-proof',
+      'format',
       'lint',
       'typecheck',
       'dependencies',
@@ -31,6 +32,7 @@ describe('arg-parse', () => {
       'api-drift',
       'forwarding',
     ]);
+    expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
     expect(result.explicit).toBeDefined();
   });
@@ -52,6 +54,7 @@ describe('arg-parse', () => {
       'exact-duplicates',
       'waste',
       'unknown-proof',
+      'format',
       'lint',
       'typecheck',
       'dependencies',
@@ -63,6 +66,7 @@ describe('arg-parse', () => {
       'api-drift',
       'forwarding',
     ]);
+    expect(result.fix).toBe(false);
     expect(result.explicit).toBeDefined();
   });
 
@@ -81,6 +85,7 @@ describe('arg-parse', () => {
       'exact-duplicates',
       'waste',
       'unknown-proof',
+      'format',
       'lint',
       'typecheck',
       'dependencies',
@@ -92,8 +97,21 @@ describe('arg-parse', () => {
       'api-drift',
       'forwarding',
     ]);
+    expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
     expect(result.explicit).toBeDefined();
+  });
+
+  it('should enable fix mode when --fix is provided', () => {
+    // Arrange
+    let argv = ['--fix'];
+
+    // Act
+    let result = parseArgs(argv);
+
+    // Assert
+    expect(result.fix).toBe(true);
+    expect(result.explicit?.fix).toBe(true);
   });
 
   it('should parse detectors when --only is provided', () => {

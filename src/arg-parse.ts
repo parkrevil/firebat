@@ -11,6 +11,7 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
   'unknown-proof',
+  'format',
   'lint',
   'typecheck',
   'dependencies',
@@ -75,6 +76,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'exact-duplicates' &&
       selection !== 'waste' &&
       selection !== 'unknown-proof' &&
+      selection !== 'format' &&
       selection !== 'lint' &&
       selection !== 'typecheck' &&
       selection !== 'dependencies' &&
@@ -87,7 +89,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'forwarding'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|unknown-proof|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|unknown-proof|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
       );
     }
 
@@ -123,6 +125,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let maxForwardDepth = DEFAULT_MAX_FORWARD_DEPTH;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
+  let fix = false;
   let configPath: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
 
@@ -132,6 +135,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     maxForwardDepth: boolean;
     exitOnFindings: boolean;
     detectors: boolean;
+    fix: boolean;
     configPath: boolean;
     logLevel: boolean;
   };
@@ -143,6 +147,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       maxForwardDepth: input.maxForwardDepth,
       exitOnFindings: input.exitOnFindings,
       detectors: input.detectors,
+      fix: input.fix,
       configPath: input.configPath,
       logLevel: input.logLevel,
     };
@@ -154,6 +159,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     maxForwardDepth: false,
     exitOnFindings: false,
     detectors: false,
+    fix: false,
     configPath: false,
     logLevel: false,
   };
@@ -173,6 +179,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         maxForwardDepth,
         exitOnFindings,
         detectors,
+        fix,
         help: true,
         ...(configPath !== undefined ? { configPath } : {}),
         ...(logLevel !== undefined ? { logLevel } : {}),
@@ -232,6 +239,13 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
+    if (arg === '--fix') {
+      fix = true;
+      explicit.fix = true;
+
+      continue;
+    }
+
     if (arg === '--only') {
       const value = argv[i + 1];
 
@@ -287,6 +301,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     maxForwardDepth,
     exitOnFindings,
     detectors,
+    fix,
     help: false,
     ...(configPath !== undefined ? { configPath } : {}),
     ...(logLevel !== undefined ? { logLevel } : {}),

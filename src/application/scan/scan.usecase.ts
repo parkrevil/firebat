@@ -8,6 +8,7 @@ import { analyzeDependencies, createEmptyDependencies } from '../../features/dep
 import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
+import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
 import { analyzeNoop, createEmptyNoop } from '../../features/noop';
@@ -77,15 +78,56 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
   });
-  const cached = await artifactRepository.getArtifact<FirebatReport>({
-    projectKey,
-    kind: 'firebat:report',
-    artifactKey,
-    inputsDigest,
-  });
 
-  if (cached) {
-    return cached;
+  const allowCache = options.fix === false;
+
+  if (allowCache) {
+    const cached = await artifactRepository.getArtifact<FirebatReport>({
+      projectKey,
+      kind: 'firebat:report',
+      artifactKey,
+      inputsDigest,
+    });
+
+    if (cached) {
+      return cached;
+    }
+  }
+
+  // Note: in fix mode, prefer to run fixable tools before parsing the program
+  // so the report reflects post-fix state.
+  const shouldRunFormat = options.detectors.includes('format');
+  const shouldRunLint = options.detectors.includes('lint');
+
+  let formatPromise: Promise<ReturnType<typeof createEmptyFormat>> | Promise<any> | null = null;
+  let lintPromise: Promise<ReturnType<typeof createEmptyLint>> | Promise<any> | null = null;
+
+  if (options.fix) {
+    const [format, lint] = await Promise.all([
+      shouldRunFormat
+        ? analyzeFormat({
+            targets: options.targets,
+            fix: true,
+            ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
+          })
+        : Promise.resolve(createEmptyFormat()),
+      shouldRunLint ? analyzeLint({ targets: options.targets, fix: true }) : Promise.resolve(createEmptyLint()),
+    ]);
+
+    formatPromise = Promise.resolve(format);
+    lintPromise = Promise.resolve(lint);
+  } else {
+    if (shouldRunFormat) {
+      formatPromise = analyzeFormat({
+        targets: options.targets,
+        fix: false,
+        ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
+      });
+    }
+
+    if (shouldRunLint) {
+      lintPromise = analyzeLint({ targets: options.targets, fix: false });
+    }
   }
 
   const program = await createFirebatProgram({
@@ -95,14 +137,14 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
   const exactDuplicates = options.detectors.includes('exact-duplicates') ? detectExactDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
-  const unknownProof = options.detectors.includes('unknown-proof')
-    ? await analyzeUnknownProof(program, {
+  const unknownProofPromise = options.detectors.includes('unknown-proof')
+    ? analyzeUnknownProof(program, {
         rootAbs: ctx.rootAbs,
-        boundaryGlobs: options.unknownProofBoundaryGlobs,
+        ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
       })
-    : createEmptyUnknownProof();
-  const lint = options.detectors.includes('lint') ? await analyzeLint(options.targets) : createEmptyLint();
-  const typecheck = options.detectors.includes('typecheck') ? await analyzeTypecheck(program) : createEmptyTypecheck();
+    : Promise.resolve(createEmptyUnknownProof());
+
+  const typecheckPromise = options.detectors.includes('typecheck') ? analyzeTypecheck(program) : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
   const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
@@ -116,6 +158,14 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
   const forwarding = options.detectors.includes('forwarding')
     ? analyzeForwarding(program, options.maxForwardDepth)
     : createEmptyForwarding();
+
+  const [unknownProof, lint, typecheck, format] = await Promise.all([
+    unknownProofPromise,
+    lintPromise ?? Promise.resolve(createEmptyLint()),
+    typecheckPromise,
+    formatPromise ?? Promise.resolve(createEmptyFormat()),
+  ]);
+
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',
@@ -129,6 +179,7 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
       'exact-duplicates': exactDuplicates,
       waste,
       unknownProof,
+      format,
       lint,
       typecheck,
       dependencies,
@@ -142,13 +193,15 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     },
   };
 
-  await artifactRepository.setArtifact({
-    projectKey,
-    kind: 'firebat:report',
-    artifactKey,
-    inputsDigest,
-    value: report,
-  });
+  if (allowCache) {
+    await artifactRepository.setArtifact({
+      projectKey,
+      kind: 'firebat:report',
+      artifactKey,
+      inputsDigest,
+      value: report,
+    });
+  }
 
   return report;
 };

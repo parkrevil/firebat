@@ -8,8 +8,8 @@ export const createEmptyLint = (): LintAnalysis => ({
   diagnostics: [],
 });
 
-export const analyzeLint = async (targets: ReadonlyArray<string>): Promise<LintAnalysis> => {
-  const result = await runOxlint({ targets });
+export const analyzeLint = async (input: { readonly targets: ReadonlyArray<string>; readonly fix: boolean }): Promise<LintAnalysis> => {
+  const result = await runOxlint({ targets: input.targets, ...(input.fix ? { fix: true } : {}) });
 
   if (!result.ok) {
     const error = result.error ?? 'oxlint failed';

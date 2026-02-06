@@ -12,6 +12,7 @@
   },
 
   "features": {
+    "format": true,
     "unknown-proof": true,
     "exact-duplicates": { "minSize": "auto" },
     "structural-duplicates": { "minSize": "auto" },

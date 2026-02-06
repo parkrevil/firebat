@@ -56,8 +56,9 @@ const printHelp = (): void => {
     '  --format text|json       Output format (default: text)',
     '  --min-size <n|auto>      Minimum size threshold for duplicates (default: auto)',
     '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
-    '  --only <list>            Limit detectors to exact-duplicates,waste,unknown-proof,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
+    '  --only <list>            Limit detectors to exact-duplicates,waste,unknown-proof,format,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
     '  (config) unknown-proof   Configure boundary globs via features["unknown-proof"].boundaryGlobs (default: global)',
+    '  --fix                    Apply safe autofixes where supported (oxfmt --write; oxlint --fix)',
     '  --config <path>          Config file path (default: <root>/.firebatrc.jsonc)',
     '  --log-level <level>      silent|error|warn|info (default: error)',
     '  --no-exit                Always exit 0 even if findings exist',
@@ -72,10 +73,12 @@ const countBlockingFindings = (report: FirebatReport): number => {
   const forwardingFindings = report.analyses.forwarding.findings.length;
   const lintErrors = report.analyses.lint.diagnostics.filter(item => item.severity === 'error').length;
   const unknownProofFindings = report.analyses.unknownProof.findings.length;
+  const formatFindings = report.analyses.format.status === 'needs-formatting' || report.analyses.format.status === 'failed' ? 1 : 0;
 
   return (
     report.analyses['exact-duplicates'].length +
     report.analyses.waste.length +
+    formatFindings +
     unknownProofFindings +
     lintErrors +
     typecheckErrors +
@@ -88,6 +91,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'exact-duplicates',
     'waste',
     'unknown-proof',
+    'format',
     'lint',
     'typecheck',
     'dependencies',

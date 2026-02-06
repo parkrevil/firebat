@@ -474,7 +474,7 @@ const collectEditsForObjectSync = (input: {
   return [...nestedEdits, ...deletions, ...insertions];
 };
 
-export const syncFirebatRcJsoncTextToTemplateKeys = (input: {
+export const syncJsoncTextToTemplateKeys = (input: {
   readonly userText: string;
   readonly templateJson: JsonValue;
 }): { ok: true; text: string; changed: boolean } | { ok: false; error: string } => {
@@ -497,3 +497,6 @@ export const syncFirebatRcJsoncTextToTemplateKeys = (input: {
     return { ok: false, error: msg };
   }
 };
+
+// Backward-compatible alias (historical name).
+export const syncFirebatRcJsoncTextToTemplateKeys = syncJsoncTextToTemplateKeys;

@@ -65,6 +65,7 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
   'unknown-proof',
+  'format',
   'lint',
   'typecheck',
   'dependencies',
@@ -300,6 +301,7 @@ const runMcpServer = async (): Promise<void> => {
         maxForwardDepth: args.maxForwardDepth ?? cfgMaxForwardDepth ?? 0,
         exitOnFindings: false,
         detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
+        fix: false,
         ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
         help: false,
       };

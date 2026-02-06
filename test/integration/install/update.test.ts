@@ -346,6 +346,86 @@ test('should delete keys missing from template even if user added them', async (
   }
 });
 
+test('should not rewrite .oxfmtrc.jsonc when keyset is unchanged (comments preserved)', async () => {
+  // Arrange
+  const tmpRootAbs = await createTmpProjectRoot();
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(tmpRootAbs);
+
+    const installResult = await withCapturedConsole(async () => {
+      return await runInstall([]);
+    });
+
+    expect(installResult.result).toBe(0);
+
+    const templatePath = path.resolve(import.meta.dir, '../../../assets/.oxfmtrc.jsonc');
+    const templateText = await Bun.file(templatePath).text();
+    const templateParsed = Bun.JSONC.parse(templateText) as any;
+
+    const cfgPath = path.join(tmpRootAbs, '.oxfmtrc.jsonc');
+    const userText = `// keep me\n${jsonText(templateParsed)}`;
+    await Bun.write(cfgPath, userText);
+
+    const before = await Bun.file(cfgPath).text();
+
+    // Act
+    const updateResult = await withCapturedConsole(async () => {
+      return await runUpdate([]);
+    });
+
+    // Assert
+    expect(updateResult.result).toBe(0);
+
+    const after = await Bun.file(cfgPath).text();
+    expect(after).toBe(before);
+    expect(after).toContain('// keep me');
+  } finally {
+    process.chdir(originalCwd);
+    await rm(tmpRootAbs, { recursive: true, force: true });
+  }
+});
+
+test('should delete keys missing from template in .oxlintrc.jsonc', async () => {
+  // Arrange
+  const tmpRootAbs = await createTmpProjectRoot();
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(tmpRootAbs);
+
+    const installResult = await withCapturedConsole(async () => {
+      return await runInstall([]);
+    });
+
+    expect(installResult.result).toBe(0);
+
+    const cfgPath = path.join(tmpRootAbs, '.oxlintrc.jsonc');
+    const beforeText = await Bun.file(cfgPath).text();
+    const parsed = Bun.JSONC.parse(beforeText) as any;
+
+    parsed.__extraRootKey = 123;
+    await Bun.write(cfgPath, `// keep me\n${jsonText(parsed)}`);
+
+    // Act
+    const updateResult = await withCapturedConsole(async () => {
+      return await runUpdate([]);
+    });
+
+    // Assert
+    expect(updateResult.result).toBe(0);
+
+    const afterText = await Bun.file(cfgPath).text();
+    const after = Bun.JSONC.parse(afterText) as any;
+    expect(after.__extraRootKey).toBeUndefined();
+    expect(afterText).toContain('// keep me');
+  } finally {
+    process.chdir(originalCwd);
+    await rm(tmpRootAbs, { recursive: true, force: true });
+  }
+});
+
 test('should abort update when config parsing fails', async () => {
   // Arrange
   const tmpRootAbs = await createTmpProjectRoot();

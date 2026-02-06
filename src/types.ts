@@ -8,6 +8,7 @@ export type FirebatDetector =
   | 'exact-duplicates'
   | 'waste'
   | 'unknown-proof'
+  | 'format'
   | 'lint'
   | 'typecheck'
   | 'dependencies'
@@ -215,6 +216,8 @@ export type TypecheckStatus = 'ok' | 'unavailable' | 'failed';
 
 export type LintStatus = 'ok' | 'unavailable' | 'failed';
 
+export type FormatStatus = 'ok' | 'unavailable' | 'needs-formatting' | 'failed';
+
 export type LintSeverity = 'error' | 'warning' | 'info';
 
 export interface LintDiagnostic {
@@ -232,6 +235,15 @@ export interface LintAnalysis {
   readonly exitCode?: number;
   readonly error?: string;
   readonly diagnostics: ReadonlyArray<LintDiagnostic>;
+}
+
+export interface FormatAnalysis {
+  readonly status: FormatStatus;
+  readonly tool: 'oxfmt';
+  readonly exitCode?: number;
+  readonly error?: string;
+  readonly rawStdout?: string;
+  readonly rawStderr?: string;
 }
 
 export interface TypecheckRunResult {
@@ -297,6 +309,7 @@ export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly unknownProof: UnknownProofAnalysis;
+  readonly format: FormatAnalysis;
   readonly lint: LintAnalysis;
   readonly typecheck: TypecheckAnalysis;
   readonly dependencies: DependencyAnalysis;

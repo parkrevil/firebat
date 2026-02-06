@@ -10,6 +10,7 @@ import type {
   EarlyReturnItem,
   ForwardingFinding,
   FirebatReport,
+  FormatAnalysis,
   LintAnalysis,
   NestingItem,
   NoopFinding,
@@ -202,6 +203,11 @@ const formatLintText = (analysis: LintAnalysis): string => {
   return `[lint] tool=${analysis.tool} status=${analysis.status} diagnostics=${total} errors=${errors}`;
 };
 
+const formatFormatText = (analysis: FormatAnalysis): string => {
+  const exitCode = typeof analysis.exitCode === 'number' ? analysis.exitCode : 0;
+  return `[format] tool=${analysis.tool} status=${analysis.status} exitCode=${exitCode}`;
+};
+
 const formatUnknownProofFindingText = (finding: UnknownProofFinding): string => {
   const rel = path.relative(process.cwd(), finding.filePath);
   const start = toPos(finding.span.start.line, finding.span.start.column);
@@ -219,6 +225,7 @@ const formatText = (report: FirebatReport): string => {
   const waste = report.analyses.waste;
   const unknownProof = report.analyses.unknownProof;
   const lint = report.analyses.lint;
+  const format = report.analyses.format;
   const selectedDetectors = new Set(report.meta.detectors);
   const typecheckItems = report.analyses.typecheck.items;
   const typecheckErrors = typecheckItems.filter(item => item.severity === 'error').length;
@@ -227,11 +234,11 @@ const formatText = (report: FirebatReport): string => {
   const unknownProofFindings = unknownProof.findings.length;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} formatStatus=${format.status} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
   );
 
   if (selectedDetectors.has('unknown-proof')) {
-    const defaultBoundaryGlobs = 'src/adapters/**,src/infrastructure/**';
+    const defaultBoundaryGlobs = 'global';
     lines.push(`[unknown-proof] status=${unknownProof.status} tool=${unknownProof.tool} findings=${unknownProof.findings.length}`);
     lines.push(
       `[unknown-proof] rules=no-type-assertion; no-explicit-unknown-outside-boundary; boundary-unknown-must-narrow-before-propagation; no-inferred-unknown/any-outside-boundary(tsgo)`
@@ -247,6 +254,10 @@ const formatText = (report: FirebatReport): string => {
 
   if (selectedDetectors.has('lint')) {
     lines.push(formatLintText(report.analyses.lint));
+  }
+
+  if (selectedDetectors.has('format')) {
+    lines.push(formatFormatText(report.analyses.format));
   }
 
   if (selectedDetectors.has('typecheck')) {

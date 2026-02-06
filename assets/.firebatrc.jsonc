@@ -10,6 +10,9 @@
     // Detect structurally-similar duplicates (renames/literals can differ).
     "structural-duplicates": { "minSize": "auto" },
 
+    // Run oxfmt in check mode (report if formatting differs).
+    "format": true,
+
     // Run oxlint and include diagnostics in the report.
     "lint": true,
 
