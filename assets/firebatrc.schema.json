@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://firebat.dev/schemas/firebatrc.schema.json",
+  "title": "Firebat Config (.firebatrc.jsonc)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "logging": {
+      "type": "object",
+      "description": "Internal firebat logging (stderr threshold + optional log file sink).",
+      "additionalProperties": false,
+      "properties": {
+        "filePath": {
+          "type": "string",
+          "description": "Log file path (absolute or relative to project root)."
+        },
+        "level": {
+          "type": "string",
+          "description": "Minimum level to emit to stderr.",
+          "enum": ["silent", "error", "warn", "info"],
+          "default": "error"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "description": "CLI output + exit behavior defaults.",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["text", "json"],
+          "default": "text",
+          "description": "Default CLI output format (can be overridden by --format)."
+        },
+        "exitOnFindings": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, CLI exits non-zero if blocking findings exist (can be overridden by --no-exit)."
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "description": "Per-feature enable/disable + feature-specific options. false disables. true enables with defaults. An object enables with explicit options (empty objects are not allowed).",
+      "additionalProperties": false,
+      "properties": {
+        "exact-duplicates": {
+          "$ref": "#/$defs/exactDuplicatesToggle"
+        },
+        "structural-duplicates": {
+          "$ref": "#/$defs/structuralDuplicatesToggle"
+        },
+        "forwarding": {
+          "$ref": "#/$defs/forwardingToggle"
+        },
+        "waste": { "$ref": "#/$defs/emptyToggle" },
+        "lint": { "$ref": "#/$defs/emptyToggle" },
+        "typecheck": { "$ref": "#/$defs/emptyToggle" },
+        "dependencies": { "$ref": "#/$defs/emptyToggle" },
+        "coupling": { "$ref": "#/$defs/emptyToggle" },
+        "nesting": { "$ref": "#/$defs/emptyToggle" },
+        "early-return": { "$ref": "#/$defs/emptyToggle" },
+        "noop": { "$ref": "#/$defs/emptyToggle" },
+        "api-drift": { "$ref": "#/$defs/emptyToggle" }
+      }
+    },
+    "mcp": {
+      "description": "MCP tool overrides. Use 'inherit' to reuse root config. Per-feature values can be false | true | 'inherit' | {options} (empty objects are not allowed).",
+      "oneOf": [
+        { "type": "string", "const": "inherit" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "features": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "exact-duplicates": { "$ref": "#/$defs/exactDuplicatesInheritable" },
+                "structural-duplicates": { "$ref": "#/$defs/structuralDuplicatesInheritable" },
+                "forwarding": { "$ref": "#/$defs/forwardingInheritable" },
+                "waste": { "$ref": "#/$defs/emptyInheritable" },
+                "lint": { "$ref": "#/$defs/emptyInheritable" },
+                "typecheck": { "$ref": "#/$defs/emptyInheritable" },
+                "dependencies": { "$ref": "#/$defs/emptyInheritable" },
+                "coupling": { "$ref": "#/$defs/emptyInheritable" },
+                "nesting": { "$ref": "#/$defs/emptyInheritable" },
+                "early-return": { "$ref": "#/$defs/emptyInheritable" },
+                "noop": { "$ref": "#/$defs/emptyInheritable" },
+                "api-drift": { "$ref": "#/$defs/emptyInheritable" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "minSize": {
+      "oneOf": [{ "type": "string", "const": "auto" }, { "type": "integer", "minimum": 0 }]
+    },
+    "emptyToggle": {
+      "description": "false disables; true enables.",
+      "type": "boolean"
+    },
+    "emptyInheritable": {
+      "description": "false disables; true enables; 'inherit' uses root.",
+      "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
+    },
+    "exactDuplicatesToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
+          "required": ["minSize"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "structuralDuplicatesToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
+          "required": ["minSize"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "forwardingToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxForwardDepth": { "type": "integer", "minimum": 0, "default": 0 } },
+          "required": ["maxForwardDepth"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "exactDuplicatesInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
+          "required": ["minSize"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "structuralDuplicatesInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
+          "required": ["minSize"],
+          "minProperties": 1
+        }
+      ]
+    },
+    "forwardingInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxForwardDepth": { "type": "integer", "minimum": 0, "default": 0 } },
+          "required": ["maxForwardDepth"],
+          "minProperties": 1
+        }
+      ]
+    }
+  }
+}

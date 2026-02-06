@@ -81,7 +81,7 @@ test('should expose tools, resources, and prompts when starting MCP server', asy
     const fixture = path.resolve(import.meta.dir, 'fixtures/sample.ts');
     const scanResult = (await client.callTool({
       name: 'scan',
-      arguments: { targets: [fixture], detectors: ['duplicates', 'waste'], minSize: 'auto', maxForwardDepth: 0 },
+      arguments: { targets: [fixture], detectors: ['exact-duplicates', 'waste'], minSize: 'auto', maxForwardDepth: 0 },
     })) as ToolResultLike;
     const scanStructured = getStructuredContent(scanResult) as { readonly report?: unknown };
 

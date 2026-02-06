@@ -57,15 +57,18 @@ import { readdir } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import * as path from 'node:path';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
+import type { FirebatConfig } from '../../firebat-config';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
-  'duplicates',
+  'exact-duplicates',
   'waste',
+  'lint',
   'typecheck',
   'dependencies',
   'coupling',
-  'duplication',
+  'structural-duplicates',
   'nesting',
   'early-return',
   'noop',
@@ -83,6 +86,69 @@ const asDetectors = (values: ReadonlyArray<string> | undefined): ReadonlyArray<F
   return picked.length > 0 ? picked : ALL_DETECTORS;
 };
 
+const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
+  if (!features) {
+    return ALL_DETECTORS;
+  }
+
+  return ALL_DETECTORS.filter(detector => {
+    const value = (features as any)[detector];
+    return value !== false;
+  });
+};
+
+const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): number | 'auto' | undefined => {
+  const exact = features?.['exact-duplicates'];
+  const structural = features?.['structural-duplicates'];
+  const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
+  const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
+
+  if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
+    throw new Error("[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize");
+  }
+
+  return exactSize ?? structuralSize;
+};
+
+const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
+  const forwarding = features?.forwarding;
+
+  if (forwarding === undefined || forwarding === false || forwarding === true) {
+    return undefined;
+  }
+
+  return forwarding.maxForwardDepth;
+};
+
+const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['features'] | undefined => {
+  const root = config?.features;
+  const mcp = config?.mcp;
+
+  if (!mcp || mcp === 'inherit') {
+    return root;
+  }
+
+  const overrides = mcp.features;
+
+  if (!overrides) {
+    return root;
+  }
+
+  const out: any = { ...(root ?? {}) };
+
+  for (const detector of ALL_DETECTORS) {
+    const override = (overrides as any)[detector];
+
+    if (override === undefined || override === 'inherit') {
+      continue;
+    }
+
+    out[detector] = override;
+  }
+
+  return out;
+};
+
 const nowMs = (): number => {
   // Bun supports performance.now()
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -94,6 +160,16 @@ const runMcpServer = async (): Promise<void> => {
   // - No stdout logs (reserved for protocol messages)
 
   const ctx = await resolveRuntimeContextFromCwd();
+
+  let config: FirebatConfig | null = null;
+
+  try {
+    const configPath = resolveDefaultFirebatRcPath(ctx.rootAbs);
+    const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs, configPath });
+    config = loaded.config;
+  } catch {
+    // Best-effort: ignore config errors in MCP (no stdout logging).
+  }
 
   const server: any = new McpServer({
     name: 'firebat',
@@ -185,13 +261,18 @@ const runMcpServer = async (): Promise<void> => {
       const t0 = nowMs();
       const targets =
         args.targets !== undefined && args.targets.length > 0 ? args.targets : await discoverDefaultTargets(ctx.rootAbs);
+
+      const effectiveFeatures = resolveMcpFeatures(config);
+      const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
+      const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
+      const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
       const options: FirebatCliOptions = {
         targets,
         format: 'json',
-        minSize: args.minSize ?? 'auto',
-        maxForwardDepth: args.maxForwardDepth ?? 0,
+        minSize: args.minSize ?? cfgMinSize ?? 'auto',
+        maxForwardDepth: args.maxForwardDepth ?? cfgMaxForwardDepth ?? 0,
         exitOnFindings: false,
-        detectors: asDetectors(args.detectors),
+        detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
         help: false,
       };
       const report = await scanUseCase(options);
@@ -239,7 +320,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-      async (args: z.infer<typeof FindPatternInputSchema>) => {
+    async (args: z.infer<typeof FindPatternInputSchema>) => {
       const hasRule = args.rule !== undefined;
       const hasMatcher = args.matcher !== undefined;
 
@@ -347,10 +428,6 @@ const runMcpServer = async (): Promise<void> => {
     },
   );
 
-  // ----
-  // LSMCP serenity-style tools: filesystem + memory
-  // ----
-
   const ListDirInputSchema = z
     .object({
       root: z.string().optional(),
@@ -375,7 +452,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-      async (args: z.infer<typeof ListDirInputSchema>) => {
+    async (args: z.infer<typeof ListDirInputSchema>) => {
       const cwd = process.cwd();
       const root = args.root !== undefined && args.root.trim().length > 0 ? args.root.trim() : cwd;
       const absRoot = path.isAbsolute(root) ? root : path.resolve(cwd, root);
@@ -693,7 +770,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-      async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
+    async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
       const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root } : {}));
       const structured = { symbolIndex };
 

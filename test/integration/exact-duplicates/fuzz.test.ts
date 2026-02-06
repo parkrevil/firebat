@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectDuplicates } from '../../../src/features/duplicate-detector';
+import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../shared/test-kit';
 
 const createFunction = (functionName: string, localName: string, literal: number): string => {
@@ -31,7 +31,7 @@ const hasMutantMixedGroup = (signature: string, mutantFile: string): boolean => 
   return hasMutant && hasNonMutant;
 };
 
-describe('integration/duplicate-detector (fuzz)', () => {
+describe('integration/exact-duplicates (fuzz)', () => {
   it('should detect duplicated structures when inputs are deterministic (seeded)', () => {
     // Arrange
     const seed = getFuzzSeed();
@@ -63,8 +63,8 @@ describe('integration/duplicate-detector (fuzz)', () => {
       sources.set(mutantFile, [mutant].join('\n'));
 
       const program = createProgramFromMap(sources);
-      const first = toDuplicateSignatures(detectDuplicates(program, 1));
-      const second = toDuplicateSignatures(detectDuplicates(program, 1));
+      const first = toDuplicateSignatures(detectExactDuplicates(program, 1));
+      const second = toDuplicateSignatures(detectExactDuplicates(program, 1));
 
       // Assert
       // Determinism: same input yields same normalized output.
@@ -91,8 +91,8 @@ describe('integration/duplicate-detector (fuzz)', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const lowThreshold = detectDuplicates(program, 1);
-    const highThreshold = detectDuplicates(program, 500);
+    const lowThreshold = detectExactDuplicates(program, 1);
+    const highThreshold = detectExactDuplicates(program, 500);
 
     // Assert
     expect(lowThreshold.length).toBeGreaterThan(0);

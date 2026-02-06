@@ -1,23 +1,34 @@
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from './interfaces';
+import type { FirebatCliExplicitFlags } from './interfaces';
+import type { FirebatLogLevel } from './firebat-config';
 import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
-  'duplicates',
+  'exact-duplicates',
   'waste',
+  'lint',
   'typecheck',
   'dependencies',
   'coupling',
-  'duplication',
+  'structural-duplicates',
   'nesting',
   'early-return',
   'noop',
   'api-drift',
   'forwarding',
 ];
+
+const parseLogLevel = (value: string): FirebatLogLevel => {
+  if (value === 'silent' || value === 'error' || value === 'warn' || value === 'info') {
+    return value;
+  }
+
+  throw new Error(`[firebat] Invalid --log-level: ${value}. Expected silent|error|warn|info`);
+};
 
 const parseNumber = (value: string, label: string): number => {
   const parsed = Number(value);
@@ -60,12 +71,13 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
 
   for (const selection of selections) {
     if (
-      selection !== 'duplicates' &&
+      selection !== 'exact-duplicates' &&
       selection !== 'waste' &&
+      selection !== 'lint' &&
       selection !== 'typecheck' &&
       selection !== 'dependencies' &&
       selection !== 'coupling' &&
-      selection !== 'duplication' &&
+      selection !== 'structural-duplicates' &&
       selection !== 'nesting' &&
       selection !== 'early-return' &&
       selection !== 'noop' &&
@@ -73,7 +85,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'forwarding'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|typecheck|dependencies|coupling|duplication|nesting|early-return|noop|api-drift|forwarding`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
       );
     }
 
@@ -109,6 +121,18 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let maxForwardDepth = DEFAULT_MAX_FORWARD_DEPTH;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
+  let configPath: string | undefined;
+  let logLevel: FirebatLogLevel | undefined;
+
+  const explicit: FirebatCliExplicitFlags = {
+    format: false,
+    minSize: false,
+    maxForwardDepth: false,
+    exitOnFindings: false,
+    detectors: false,
+    configPath: false,
+    logLevel: false,
+  };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -126,6 +150,9 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         exitOnFindings,
         detectors,
         help: true,
+        ...(configPath !== undefined ? { configPath } : {}),
+        ...(logLevel !== undefined ? { logLevel } : {}),
+        explicit,
       };
     }
 
@@ -137,6 +164,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       }
 
       format = parseOutputFormat(value);
+      explicit.format = true;
 
       i += 1;
 
@@ -151,6 +179,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       }
 
       minSize = parseMinSize(value);
+      explicit.minSize = true;
 
       i += 1;
 
@@ -165,6 +194,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       }
 
       maxForwardDepth = Math.max(0, Math.round(parseNumber(value, '--max-forward-depth')));
+      explicit.maxForwardDepth = true;
 
       i += 1;
 
@@ -173,6 +203,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
 
     if (arg === '--no-exit') {
       exitOnFindings = false;
+      explicit.exitOnFindings = true;
 
       continue;
     }
@@ -185,9 +216,36 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       }
 
       detectors = parseDetectors(value);
+      explicit.detectors = true;
 
       i += 1;
 
+      continue;
+    }
+
+    if (arg === '--config') {
+      const value = argv[i + 1];
+
+      if (typeof value !== 'string') {
+        throw new Error('[firebat] Missing value for --config');
+      }
+
+      configPath = path.resolve(value);
+      explicit.configPath = true;
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--log-level') {
+      const value = argv[i + 1];
+
+      if (typeof value !== 'string') {
+        throw new Error('[firebat] Missing value for --log-level');
+      }
+
+      logLevel = parseLogLevel(value);
+      explicit.logLevel = true;
+      i += 1;
       continue;
     }
 
@@ -206,6 +264,9 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     exitOnFindings,
     detectors,
     help: false,
+    ...(configPath !== undefined ? { configPath } : {}),
+    ...(logLevel !== undefined ? { logLevel } : {}),
+    explicit,
   };
 };
 

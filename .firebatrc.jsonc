@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
+
+  // CLI behavior
+  "cli": {
+    "logLevel": "error"
+  },
+
+  // Default scan options (CLI and MCP)
+  "scan": {
+    "format": "text",
+    "minSize": "auto",
+    "maxForwardDepth": 0,
+    "exitOnFindings": true,
+    "detectors": [
+      "duplicates",
+      "waste",
+      "typecheck",
+      "dependencies",
+      "coupling",
+      "duplication",
+      "nesting",
+      "early-return",
+      "noop",
+      "api-drift",
+      "forwarding"
+    ]
+  },
+
+  // MCP-specific overrides
+  "mcp": {
+    "scan": {
+      "minSize": "auto",
+      "maxForwardDepth": 0,
+      "detectors": [
+        "duplicates",
+        "waste",
+        "typecheck",
+        "dependencies",
+        "coupling",
+        "duplication",
+        "nesting",
+        "early-return",
+        "noop",
+        "api-drift",
+        "forwarding"
+      ]
+    }
+  }
+}

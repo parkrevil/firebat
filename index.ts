@@ -1,6 +1,6 @@
 import { runCli } from './src/adapters/cli/entry';
 import { runCache } from './src/adapters/cli/cache';
-import { runInstall } from './src/adapters/cli/install';
+import { runInstall, runUpdate } from './src/adapters/cli/install';
 import { runMcp } from './src/adapters/mcp/entry';
 
 import { appendFirebatLog } from './src/infra/logging';
@@ -11,10 +11,16 @@ const main = async (): Promise<void> => {
 	const subcommand = argv[0];
 
 	try {
-		if (subcommand === 'install') {
-			await runInstall();
+		if (subcommand === 'install' || subcommand === 'i') {
+			const exitCode = await runInstall(argv.slice(1));
 
-			return;
+			process.exit(exitCode);
+		}
+
+		if (subcommand === 'update' || subcommand === 'u') {
+			const exitCode = await runUpdate(argv.slice(1));
+
+			process.exit(exitCode);
 		}
 
 		if (subcommand === 'cache') {
@@ -45,6 +51,8 @@ const main = async (): Promise<void> => {
 		} catch {
 			// ignore
 		}
+
+		console.error(message);
 
 		process.exit(1);
 	}

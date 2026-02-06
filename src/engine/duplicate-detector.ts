@@ -8,7 +8,7 @@ import { collectDuplicateGroups } from './duplicate-collector';
 import { createOxcFingerprint } from './oxc-fingerprint';
 
 const isDuplicateTarget = (node: Node): boolean => {
-  // Simplified target selection for Oxc AST
+  // Simplified target selection for AST
   const type = getNodeType(node);
 
   return (
@@ -45,6 +45,6 @@ const getItemKind = (node: Node): DuplicateItem['kind'] => {
   return 'node';
 };
 
-export const detectDuplicatesOxc = (files: ParsedFile[], minSize: number): DuplicateGroup[] => {
+export const detectDuplicates = (files: ParsedFile[], minSize: number): DuplicateGroup[] => {
   return collectDuplicateGroups(files, minSize, isDuplicateTarget, createOxcFingerprint, getItemKind);
 };

@@ -5,12 +5,13 @@ export type { FirebatConfig } from './firebat-config';
 export type MinSizeOption = number | 'auto';
 
 export type FirebatDetector =
-  | 'duplicates'
+  | 'exact-duplicates'
   | 'waste'
+  | 'lint'
   | 'typecheck'
   | 'dependencies'
   | 'coupling'
-  | 'duplication'
+  | 'structural-duplicates'
   | 'nesting'
   | 'early-return'
   | 'noop'
@@ -107,7 +108,7 @@ export interface CouplingAnalysis {
   readonly hotspots: ReadonlyArray<CouplingHotspot>;
 }
 
-export interface DuplicationAnalysis {
+export interface StructuralDuplicatesAnalysis {
   readonly cloneClasses: ReadonlyArray<DuplicateGroup>;
 }
 
@@ -211,6 +212,27 @@ export type TypecheckSeverity = 'error' | 'warning';
 
 export type TypecheckStatus = 'ok' | 'unavailable' | 'failed';
 
+export type LintStatus = 'ok' | 'unavailable' | 'failed';
+
+export type LintSeverity = 'error' | 'warning' | 'info';
+
+export interface LintDiagnostic {
+  readonly filePath?: string;
+  readonly message: string;
+  readonly code?: string;
+  readonly severity: LintSeverity;
+  readonly line?: number;
+  readonly column?: number;
+}
+
+export interface LintAnalysis {
+  readonly status: LintStatus;
+  readonly tool: 'oxlint';
+  readonly exitCode?: number;
+  readonly error?: string;
+  readonly diagnostics: ReadonlyArray<LintDiagnostic>;
+}
+
 export interface TypecheckRunResult {
   readonly exitCode: number | null;
   readonly combinedOutput: string;
@@ -244,12 +266,13 @@ export interface FirebatMeta {
 }
 
 export interface FirebatAnalyses {
-  readonly duplicates: ReadonlyArray<DuplicateGroup>;
+  readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
+  readonly lint: LintAnalysis;
   readonly typecheck: TypecheckAnalysis;
   readonly dependencies: DependencyAnalysis;
   readonly coupling: CouplingAnalysis;
-  readonly duplication: DuplicationAnalysis;
+  readonly 'structural-duplicates': StructuralDuplicatesAnalysis;
   readonly nesting: NestingAnalysis;
   readonly earlyReturn: EarlyReturnAnalysis;
   readonly noop: NoopAnalysis;

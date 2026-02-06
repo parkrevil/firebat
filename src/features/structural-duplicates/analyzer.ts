@@ -1,17 +1,17 @@
 import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
-import type { DuplicateGroup, DuplicateItem, DuplicationAnalysis } from '../../types';
+import type { DuplicateGroup, DuplicateItem, StructuralDuplicatesAnalysis } from '../../types';
 
 import { collectDuplicateGroups } from '../../engine/duplicate-collector';
 import { getNodeType } from '../../engine/oxc-ast-utils';
 import { createOxcFingerprintShape } from '../../engine/oxc-fingerprint';
 
-const createEmptyDuplication = (): DuplicationAnalysis => ({
+const createEmptyStructuralDuplicates = (): StructuralDuplicatesAnalysis => ({
   cloneClasses: [],
 });
 
-const isDuplicationTarget = (node: Node): boolean => {
+const isStructuralDuplicatesTarget = (node: Node): boolean => {
   const nodeType = getNodeType(node);
 
   return (
@@ -43,12 +43,12 @@ const getItemKind = (node: Node): DuplicateItem['kind'] => {
 };
 
 const detectStructuralDuplicates = (files: ReadonlyArray<ParsedFile>, minSize: number): DuplicateGroup[] => {
-  return collectDuplicateGroups(files, minSize, isDuplicationTarget, createOxcFingerprintShape, getItemKind);
+  return collectDuplicateGroups(files, minSize, isStructuralDuplicatesTarget, createOxcFingerprintShape, getItemKind);
 };
 
-const analyzeDuplication = (files: ReadonlyArray<ParsedFile>, minSize: number): DuplicationAnalysis => {
+const analyzeStructuralDuplicates = (files: ReadonlyArray<ParsedFile>, minSize: number): StructuralDuplicatesAnalysis => {
   if (files.length === 0) {
-    return createEmptyDuplication();
+    return createEmptyStructuralDuplicates();
   }
 
   return {
@@ -56,4 +56,4 @@ const analyzeDuplication = (files: ReadonlyArray<ParsedFile>, minSize: number): 
   };
 };
 
-export { analyzeDuplication, createEmptyDuplication };
+export { analyzeStructuralDuplicates, createEmptyStructuralDuplicates };

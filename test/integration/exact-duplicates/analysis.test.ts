@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectDuplicates } from '../../../src/features/duplicate-detector';
+import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createProgramFromMap } from '../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {
@@ -22,7 +22,7 @@ function createClassSource(name: string): string {
   ].join('\n');
 }
 
-describe('integration/duplicate-detector', () => {
+describe('integration/exact-duplicates', () => {
   it('should detect duplicate groups when functions are identical', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -32,7 +32,7 @@ describe('integration/duplicate-detector', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let groups = detectDuplicates(program, 1);
+    let groups = detectExactDuplicates(program, 1);
     let hasGroup = groups.some(group => group.items.length >= 2);
 
     // Assert
@@ -48,7 +48,7 @@ describe('integration/duplicate-detector', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let groups = detectDuplicates(program, 500);
+    let groups = detectExactDuplicates(program, 500);
 
     // Assert
     expect(groups.length).toBe(0);
@@ -63,7 +63,7 @@ describe('integration/duplicate-detector', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let groups = detectDuplicates(program, 1);
+    let groups = detectExactDuplicates(program, 1);
 
     // Assert
     expect(groups.length).toBe(0);
@@ -78,7 +78,7 @@ describe('integration/duplicate-detector', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let groups = detectDuplicates(program, 1);
+    let groups = detectExactDuplicates(program, 1);
     let hasClassGroup = groups.some(group => group.items.some(item => item.kind === 'type'));
 
     // Assert
@@ -90,7 +90,7 @@ describe('integration/duplicate-detector', () => {
     let sources = new Map<string, string>();
     // Act
     let program = createProgramFromMap(sources);
-    let groups = detectDuplicates(program, 1);
+    let groups = detectExactDuplicates(program, 1);
 
     // Assert
     expect(groups.length).toBe(0);

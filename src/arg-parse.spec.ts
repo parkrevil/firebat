@@ -17,12 +17,13 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
-      'duplicates',
+      'exact-duplicates',
       'waste',
+      'lint',
       'typecheck',
       'dependencies',
       'coupling',
-      'duplication',
+      'structural-duplicates',
       'nesting',
       'early-return',
       'noop',
@@ -30,6 +31,7 @@ describe('arg-parse', () => {
       'forwarding',
     ]);
     expect(result.help).toBe(false);
+    expect(result.explicit).toBeDefined();
   });
 
   it('should return help mode with defaults when help flag is provided', () => {
@@ -46,18 +48,20 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
-      'duplicates',
+      'exact-duplicates',
       'waste',
+      'lint',
       'typecheck',
       'dependencies',
       'coupling',
-      'duplication',
+      'structural-duplicates',
       'nesting',
       'early-return',
       'noop',
       'api-drift',
       'forwarding',
     ]);
+    expect(result.explicit).toBeDefined();
   });
 
   it('should parse format, minSize, and targets when options are provided', () => {
@@ -72,12 +76,13 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(2);
     expect(result.targets).toEqual([path.resolve('packages')]);
     expect(result.detectors).toEqual([
-      'duplicates',
+      'exact-duplicates',
       'waste',
+      'lint',
       'typecheck',
       'dependencies',
       'coupling',
-      'duplication',
+      'structural-duplicates',
       'nesting',
       'early-return',
       'noop',
@@ -85,6 +90,7 @@ describe('arg-parse', () => {
       'forwarding',
     ]);
     expect(result.help).toBe(false);
+    expect(result.explicit).toBeDefined();
   });
 
   it('should parse detectors when --only is provided', () => {
@@ -95,6 +101,20 @@ describe('arg-parse', () => {
 
     // Assert
     expect(result.detectors).toEqual(['waste']);
+  });
+
+  it('should parse configPath and logLevel when provided', () => {
+    // Arrange
+    let argv = ['--config', './.firebatrc.jsonc', '--log-level', 'warn'];
+
+    // Act
+    let result = parseArgs(argv);
+
+    // Assert
+    expect(result.configPath).toBe(path.resolve('./.firebatrc.jsonc'));
+    expect(result.logLevel).toBe('warn');
+    expect(result.explicit?.configPath).toBe(true);
+    expect(result.explicit?.logLevel).toBe(true);
   });
 
   

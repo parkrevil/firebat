@@ -10,6 +10,7 @@ import type {
   EarlyReturnItem,
   ForwardingFinding,
   FirebatReport,
+  LintAnalysis,
   NestingItem,
   NoopFinding,
   OutputFormat,
@@ -193,19 +194,32 @@ const formatTypecheckItemText = (item: TypecheckItem): string => {
   return `  - ${item.severity} ${item.code}: ${item.message} @ ${rel}:${start}`;
 };
 
+const formatLintText = (analysis: LintAnalysis): string => {
+  const total = analysis.diagnostics.length;
+  const errors = analysis.diagnostics.filter(d => d.severity === 'error').length;
+
+  return `[lint] tool=${analysis.tool} status=${analysis.status} diagnostics=${total} errors=${errors}`;
+};
+
 const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const detectors = report.meta.detectors.join(',');
-  const duplicates = report.analyses.duplicates;
+  const duplicates = report.analyses['exact-duplicates'];
   const waste = report.analyses.waste;
+  const lint = report.analyses.lint;
   const selectedDetectors = new Set(report.meta.detectors);
   const typecheckItems = report.analyses.typecheck.items;
   const typecheckErrors = typecheckItems.filter(item => item.severity === 'error').length;
   const typecheckWarnings = typecheckItems.filter(item => item.severity === 'warning').length;
+  const lintErrors = lint.diagnostics.filter(d => d.severity === 'error').length;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
   );
+
+  if (selectedDetectors.has('lint')) {
+    lines.push(formatLintText(report.analyses.lint));
+  }
 
   if (selectedDetectors.has('typecheck')) {
     lines.push(`[typecheck] items=${typecheckItems.length} status=${report.analyses.typecheck.status} tool=${report.analyses.typecheck.tool}`);
@@ -221,8 +235,8 @@ const formatText = (report: FirebatReport): string => {
     lines.push(`[coupling] hotspots=${report.analyses.coupling.hotspots.length}`);
   }
 
-  if (selectedDetectors.has('duplication')) {
-    lines.push(`[duplication] cloneClasses=${report.analyses.duplication.cloneClasses.length}`);
+  if (selectedDetectors.has('structural-duplicates')) {
+    lines.push(`[structural-duplicates] cloneClasses=${report.analyses['structural-duplicates'].cloneClasses.length}`);
   }
 
   if (selectedDetectors.has('nesting')) {
@@ -278,15 +292,15 @@ const formatText = (report: FirebatReport): string => {
     lines.push(formatCouplingText(report.analyses.coupling.hotspots));
   }
 
-  if (selectedDetectors.has('duplication')) {
-    const cloneClasses = report.analyses.duplication.cloneClasses;
+  if (selectedDetectors.has('structural-duplicates')) {
+    const cloneClasses = report.analyses['structural-duplicates'].cloneClasses;
 
     lines.push('');
-    lines.push(`[duplication] cloneClasses=${cloneClasses.length}`);
+    lines.push(`[structural-duplicates] cloneClasses=${cloneClasses.length}`);
 
     for (const group of cloneClasses) {
       lines.push('');
-      lines.push(formatDuplicateGroupTextWithLabel('duplication', group));
+      lines.push(formatDuplicateGroupTextWithLabel('structural-duplicates', group));
     }
   }
 

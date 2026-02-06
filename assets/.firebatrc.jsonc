@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
+
+  // Internal firebat logging.
+  // - `level`: minimum severity written to stderr (silent|error|warn|info)
+  // - `filePath`: optional file sink (absolute path or relative to repo root)
+  "logging": {
+    "level": "error",
+    "filePath": "./.firebat/firebat.log",
+  },
+
+  // Default CLI behavior (can be overridden by flags).
+  "output": {
+    // `text` prints a human-readable summary; `json` prints the full report JSON.
+    "format": "text",
+
+    // When true, CLI exits non-zero if blocking findings exist.
+    // Equivalent to: false when `--no-exit` is used.
+    "exitOnFindings": true,
+  },
+
+  // Per-feature toggles.
+  // - `false` disables the feature.
+  // - `true` enables the feature with defaults.
+  // Some features support options via an object.
+  "features": {
+    // Duplicate detectors share the same size threshold.
+    // If both specify `minSize`, they must match.
+    "exact-duplicates": { "minSize": "auto" },
+    "structural-duplicates": { "minSize": "auto" },
+
+    // Run oxlint and include diagnostics in the scan report.
+    "lint": true,
+
+    "waste": true,
+    "typecheck": true,
+    "dependencies": true,
+    "coupling": true,
+    "nesting": true,
+    "early-return": true,
+    "noop": true,
+    "api-drift": true,
+
+    // Thin-wrapper forwarding chain detection.
+    "forwarding": { "maxForwardDepth": 0 },
+  },
+
+  // MCP overrides.
+  // - Use "inherit" to reuse root config.
+  // - Per-feature values can be: false | "inherit" | {options}
+  "mcp": "inherit",
+}

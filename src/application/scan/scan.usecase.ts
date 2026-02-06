@@ -4,14 +4,15 @@ import type { FirebatReport } from '../../types';
 
 import { analyzeApiDrift, createEmptyApiDrift } from '../../features/api-drift';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
-import { analyzeDependencies, createEmptyDependencies } from '../../features/dependency-graph';
-import { analyzeDuplication, createEmptyDuplication } from '../../features/duplication-analysis';
+import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
+import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
+import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
 import { analyzeNoop, createEmptyNoop } from '../../features/noop';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
-import { detectDuplicates } from '../../features/duplicate-detector';
+import { detectExactDuplicates } from '../../features/exact-duplicates';
 import { detectWaste } from '../../features/waste';
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
@@ -88,15 +89,16 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
   });
   const resolvedMinSize =
     options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
-  const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, resolvedMinSize) : [];
+  const exactDuplicates = options.detectors.includes('exact-duplicates') ? detectExactDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
+  const lint = options.detectors.includes('lint') ? await analyzeLint(options.targets) : createEmptyLint();
   const typecheck = options.detectors.includes('typecheck') ? await analyzeTypecheck(program) : createEmptyTypecheck();
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
   const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
-  const duplication = options.detectors.includes('duplication')
-    ? analyzeDuplication(program, resolvedMinSize)
-    : createEmptyDuplication();
+  const structuralDuplicates = options.detectors.includes('structural-duplicates')
+    ? analyzeStructuralDuplicates(program, resolvedMinSize)
+    : createEmptyStructuralDuplicates();
   const nesting = options.detectors.includes('nesting') ? analyzeNesting(program) : createEmptyNesting();
   const earlyReturn = options.detectors.includes('early-return') ? analyzeEarlyReturn(program) : createEmptyEarlyReturn();
   const noop = options.detectors.includes('noop') ? analyzeNoop(program) : createEmptyNoop();
@@ -114,12 +116,13 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
       detectors: options.detectors,
     },
     analyses: {
-      duplicates,
+      'exact-duplicates': exactDuplicates,
       waste,
+      lint,
       typecheck,
       dependencies,
       coupling,
-      duplication,
+      'structural-duplicates': structuralDuplicates,
       nesting,
       earlyReturn,
       noop,

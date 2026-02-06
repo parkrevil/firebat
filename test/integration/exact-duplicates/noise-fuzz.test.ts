@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectDuplicates } from '../../../src/features/duplicate-detector';
+import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../shared/test-kit';
 
 const createDuplicateFunction = (functionName: string, literal: number): string => {
@@ -21,7 +21,7 @@ const hasDuplicateGroup = (signatures: readonly string[]): boolean => {
   });
 };
 
-describe('duplicate-detector (integration fuzz)', () => {
+describe('exact-duplicates (integration fuzz)', () => {
   it('should remain stable when extra non-duplicate code is present (seeded)', () => {
     // Arrange
     const seed = getFuzzSeed();
@@ -46,8 +46,8 @@ describe('duplicate-detector (integration fuzz)', () => {
       sources.set(filePath, [dupA, dupB, ...noiseParts].join('\n\n'));
 
       const program = createProgramFromMap(sources);
-      const first = toDuplicateSignatures(detectDuplicates(program, 1));
-      const second = toDuplicateSignatures(detectDuplicates(program, 1));
+      const first = toDuplicateSignatures(detectExactDuplicates(program, 1));
+      const second = toDuplicateSignatures(detectExactDuplicates(program, 1));
 
       // Assert
       expect(second).toEqual(first);

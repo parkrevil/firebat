@@ -1,5 +1,6 @@
-import type { FirebatReport } from '../../types';
+import type { FirebatDetector, FirebatReport } from '../../types';
 import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatConfig } from '../../firebat-config';
 
 import { parseArgs } from '../../arg-parse';
 import { formatReport } from '../../report';
@@ -7,6 +8,31 @@ import { discoverDefaultTargets } from '../../target-discovery';
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { appendFirebatLog } from '../../infra/logging';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
+import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
+
+const LOG_LEVELS = ['silent', 'error', 'warn', 'info'] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+const shouldLog = (level: LogLevel, threshold: LogLevel): boolean => {
+  if (threshold === 'silent') return false;
+  if (level === 'error') return threshold !== 'silent';
+  if (level === 'warn') return threshold === 'warn' || threshold === 'info';
+  return threshold === 'info';
+};
+
+const createCliLogger = (logLevel: LogLevel) => {
+  return {
+    error: (message: string): void => {
+      if (shouldLog('error', logLevel)) console.error(message);
+    },
+    warn: (message: string): void => {
+      if (shouldLog('warn', logLevel)) console.error(message);
+    },
+    info: (message: string): void => {
+      if (shouldLog('info', logLevel)) console.error(message);
+    },
+  };
+};
 
 const printHelp = (): void => {
   const lines = [
@@ -16,6 +42,9 @@ const printHelp = (): void => {
     '  firebat [targets...] [options]',
     '  firebat scan [targets...] [options]',
     '  firebat install',
+    '  firebat i',
+    '  firebat update',
+    '  firebat u',
     '  firebat cache clean',
     '  firebat mcp',
     '',
@@ -27,7 +56,9 @@ const printHelp = (): void => {
     '  --format text|json       Output format (default: text)',
     '  --min-size <n|auto>      Minimum size threshold for duplicates (default: auto)',
     '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
-    '  --only <list>            Limit detectors to duplicates,waste,typecheck,dependencies,coupling,duplication,nesting,early-return,noop,api-drift,forwarding',
+    '  --only <list>            Limit detectors to exact-duplicates,waste,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
+    '  --config <path>          Config file path (default: <root>/.firebatrc.jsonc)',
+    '  --log-level <level>      silent|error|warn|info (default: error)',
     '  --no-exit                Always exit 0 even if findings exist',
     '  -h, --help               Show this help',
   ];
@@ -38,21 +69,110 @@ const printHelp = (): void => {
 const countBlockingFindings = (report: FirebatReport): number => {
   const typecheckErrors = report.analyses.typecheck.items.filter(item => item.severity === 'error').length;
   const forwardingFindings = report.analyses.forwarding.findings.length;
+  const lintErrors = report.analyses.lint.diagnostics.filter(item => item.severity === 'error').length;
 
-  return report.analyses.duplicates.length + report.analyses.waste.length + typecheckErrors + forwardingFindings;
+  return (
+    report.analyses['exact-duplicates'].length +
+    report.analyses.waste.length +
+    lintErrors +
+    typecheckErrors +
+    forwardingFindings
+  );
+};
+
+const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
+  const all: ReadonlyArray<FirebatDetector> = [
+    'exact-duplicates',
+    'waste',
+    'lint',
+    'typecheck',
+    'dependencies',
+    'coupling',
+    'structural-duplicates',
+    'nesting',
+    'early-return',
+    'noop',
+    'api-drift',
+    'forwarding',
+  ];
+
+  if (!features) {
+    return all;
+  }
+
+  return all.filter(detector => {
+    const value = (features as any)[detector];
+    return value !== false;
+  });
+};
+
+const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): FirebatCliOptions['minSize'] | undefined => {
+  const exact = features?.['exact-duplicates'];
+  const structural = features?.['structural-duplicates'];
+  const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
+  const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
+
+  if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
+    throw new Error("[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize");
+  }
+
+  return exactSize ?? structuralSize;
+};
+
+const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
+  const forwarding = features?.forwarding;
+
+  if (forwarding === undefined || forwarding === false || forwarding === true) {
+    return undefined;
+  }
+
+  return forwarding.maxForwardDepth;
 };
 
 const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
 
-  if (options.targets.length > 0 || options.help) {
+  if (options.help) {
     return options;
   }
 
-  const targets = await discoverDefaultTargets(process.cwd());
+  const { rootAbs } = await resolveFirebatRootFromCwd();
+
+  let config: FirebatConfig | null = null;
+  const configPath = options.configPath ?? resolveDefaultFirebatRcPath(rootAbs);
+  const loaded = await loadFirebatConfigFile({ rootAbs, configPath });
+  config = loaded.config;
+
+  const outputCfg = config?.output;
+  const loggingCfg = config?.logging;
+  const featuresCfg = config?.features;
+  const cfgDetectors = resolveEnabledDetectorsFromFeatures(featuresCfg);
+  const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
+  const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
+
+  const merged: FirebatCliOptions = {
+    ...options,
+    ...(options.explicit?.format ? {} : outputCfg?.format !== undefined ? { format: outputCfg.format } : {}),
+    ...(options.explicit?.exitOnFindings
+      ? {}
+      : outputCfg?.exitOnFindings !== undefined
+        ? { exitOnFindings: outputCfg.exitOnFindings }
+        : {}),
+    ...(options.explicit?.minSize ? {} : cfgMinSize !== undefined ? { minSize: cfgMinSize } : {}),
+    ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
+    ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
+    ...(options.explicit?.logLevel ? {} : loggingCfg?.level !== undefined ? { logLevel: loggingCfg.level } : {}),
+    configPath: loaded.resolvedPath,
+  };
+
+  if (merged.targets.length > 0) {
+    return merged;
+  }
+
+  const targets = await discoverDefaultTargets(rootAbs);
 
   return {
-    ...options,
+    ...merged,
     targets,
   };
 };
@@ -77,10 +197,13 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
       // ignore
     }
 
-    console.error(message);
+    const logger = createCliLogger('error');
+    logger.error(message);
 
     return 1;
   }
+
+  const logger = createCliLogger(options.logLevel ?? 'error');
 
   if (options.help) {
     printHelp();
@@ -98,16 +221,29 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     try {
       const { rootAbs } = await resolveFirebatRootFromCwd();
 
+      let logPath = '.firebat/cli-error.log';
+
+      try {
+        const loaded = await loadFirebatConfigFile({ rootAbs, configPath: options.configPath });
+        const filePath = loaded.config?.logging?.filePath;
+
+        if (typeof filePath === 'string' && filePath.trim().length > 0) {
+          logPath = filePath;
+        }
+      } catch {
+        // ignore
+      }
+
       await appendFirebatLog(
         rootAbs,
-        '.firebat/cli-error.log',
+        logPath,
         err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
       );
     } catch {
       // ignore
     }
 
-    console.error(`[firebat] Failed: ${message}`);
+    logger.error(`[firebat] Failed: ${message}`);
 
     return 1;
   }

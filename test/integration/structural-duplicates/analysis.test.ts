@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../../src/engine/types';
 
-import { analyzeDuplication } from '../../../src/features/duplication-analysis';
+import { analyzeStructuralDuplicates } from '../../../src/features/structural-duplicates';
 import { createProgramFromMap } from '../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {
@@ -13,7 +13,7 @@ function createAnonymousFunctionSource(value: number): string {
   return `export default function () {\n  const localValue = ${value};\n  return localValue + 1;\n}`;
 }
 
-describe('integration/duplication-analysis', () => {
+describe('integration/structural-duplicates', () => {
   it('should detect clone classes when structures match', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -23,8 +23,8 @@ describe('integration/duplication-analysis', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let duplication = analyzeDuplication(program, 1);
-    let hasCloneClass = duplication.cloneClasses.some(group => group.items.length >= 2);
+    let structural = analyzeStructuralDuplicates(program, 1);
+    let hasCloneClass = structural.cloneClasses.some(group => group.items.length >= 2);
 
     // Assert
     expect(hasCloneClass).toBe(true);
@@ -39,7 +39,7 @@ describe('integration/duplication-analysis', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let duplication = analyzeDuplication(program, 1);
+    let duplication = analyzeStructuralDuplicates(program, 1);
 
     // Assert
     expect(duplication.cloneClasses.length).toBe(0);
@@ -49,7 +49,7 @@ describe('integration/duplication-analysis', () => {
     // Arrange
     let files: ReadonlyArray<ParsedFile> = [];
     // Act
-    let duplication = analyzeDuplication(files, 1);
+    let duplication = analyzeStructuralDuplicates(files, 1);
 
     // Assert
     expect(duplication.cloneClasses.length).toBe(0);
@@ -64,8 +64,8 @@ describe('integration/duplication-analysis', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let duplication = analyzeDuplication(program, 1);
-    let headers = duplication.cloneClasses.flatMap(group => group.items.map(item => item.header));
+    let structural = analyzeStructuralDuplicates(program, 1);
+    let headers = structural.cloneClasses.flatMap(group => group.items.map(item => item.header));
 
     // Assert
     expect(headers.some(header => header === 'anonymous')).toBe(true);
@@ -81,8 +81,8 @@ describe('integration/duplication-analysis', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let duplication = analyzeDuplication(program, 1);
-    let groupSize = duplication.cloneClasses.reduce((max, group) => Math.max(max, group.items.length), 0);
+    let structural = analyzeStructuralDuplicates(program, 1);
+    let groupSize = structural.cloneClasses.reduce((max, group) => Math.max(max, group.items.length), 0);
 
     // Assert
     expect(groupSize).toBeGreaterThanOrEqual(3);

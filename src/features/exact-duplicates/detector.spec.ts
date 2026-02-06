@@ -4,9 +4,9 @@ import type { DuplicateGroup } from '../../types';
 import type { ParsedFile } from '../../engine/types';
 
 import { parseSource } from '../../engine/parse-source';
-import { detectDuplicates } from './detector';
+import { detectExactDuplicates } from './detector';
 
-describe('detector', () => {
+describe('exact-duplicates detector', () => {
   it('should report at least one duplicate group when identical functions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -27,7 +27,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 10);
+    let groups = detectExactDuplicates(program, 10);
     let functionGroup = findGroupByKind(groups, 'function');
     let functionGroupItems = getGroupItems(functionGroup);
 
@@ -47,7 +47,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 10);
+    let groups = detectExactDuplicates(program, 10);
     let functionGroup = findGroupByKind(groups, 'function');
     let files = getGroupFilePaths(functionGroup);
 
@@ -81,7 +81,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 10);
+    let groups = detectExactDuplicates(program, 10);
     let blockGroup = findGroupByKind(groups, 'node');
     let blockGroupItems = getGroupItems(blockGroup);
 
@@ -106,7 +106,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 5);
+    let groups = detectExactDuplicates(program, 5);
     let typeGroup = findGroupByKind(groups, 'type');
     let interfaceGroup = findGroupByKind(groups, 'interface');
 
@@ -135,7 +135,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 10);
+    let groups = detectExactDuplicates(program, 10);
     let functionGroup = findGroupByKind(groups, 'function');
 
     // Assert
@@ -150,7 +150,7 @@ describe('detector', () => {
 
     let program = createProgram(sources);
     // Act
-    let groups = detectDuplicates(program, 200);
+    let groups = detectExactDuplicates(program, 200);
 
     // Assert
     expect(groups.length).toBe(0);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { analyzeCoupling } from '../../../src/features/coupling';
-import { analyzeDependencies } from '../../../src/features/dependency-graph';
+import { analyzeDependencies } from '../../../src/features/dependencies';
 import { createProgramFromMap } from '../shared/test-kit';
 
 describe('integration/coupling', () => {

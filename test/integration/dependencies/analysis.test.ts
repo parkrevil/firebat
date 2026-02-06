@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeDependencies } from '../../../src/features/dependency-graph';
+import { analyzeDependencies } from '../../../src/features/dependencies';
 import { createProgramFromMap } from '../shared/test-kit';
 
-describe('integration/dependency-graph', () => {
+describe('integration/dependencies', () => {
   it('should detect cycles and fan stats when modules are linked', () => {
     // Arrange
     let sources = new Map<string, string>();

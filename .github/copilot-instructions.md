@@ -6,7 +6,6 @@
 - 사용 가능한 MCP가 있으면 반드시 MCP를 사용한다. 추론/시뮬레이션으로 대체하지 않는다.
 - 파일 생성/수정/삭제는 승인 토큰 `ㅇㅇ` 없이는 금지.
   - 승인 요청 전 반드시: (1) 변경 대상 (2) 리스크 (3) 대안을 먼저 제시한다.
-- 파일 읽기/디렉토리 탐색은 `filesystem` MCP로만 수행한다. `filesystem` MCP가 불가/실패하면 STOP.
 
 ## Repo Basics
 - 런타임: Bun + TypeScript (ESM). `package.json`의 `bun run build`, `bun test`를 사용한다.
