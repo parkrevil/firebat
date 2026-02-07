@@ -85,6 +85,28 @@ export const runTsgoUnknownProofChecks = async (input: {
 		async session => {
 			const findings: UnknownProofFinding[] = [];
 
+			const requestHoverOnce = async (args: { uri: string; line: number; character: number }) => {
+				return session.lsp
+					.request('textDocument/hover', {
+						textDocument: { uri: args.uri },
+						position: { line: args.line, character: args.character },
+					})
+					.catch(() => null);
+			};
+
+			const requestHover = async (args: { uri: string; line: number; character: number }) => {
+				const first = await requestHoverOnce(args);
+
+				if (first !== null) {
+					return first;
+				}
+
+				// tsgo can occasionally need a brief warm-up right after didOpen.
+				await new Promise<void>(r => setTimeout(r, 30));
+
+				return requestHoverOnce(args);
+			};
+
 			const filePaths = new Set<string>();
 			for (const filePath of input.candidatesByFile.keys()) filePaths.add(filePath);
 			for (const filePath of input.boundaryUsageCandidatesByFile?.keys() ?? []) filePaths.add(filePath);
@@ -105,17 +127,11 @@ export const runTsgoUnknownProofChecks = async (input: {
 
 				const { uri } = await openTsDocument({ lsp: session.lsp, filePath, text: file.sourceText });
 
-				// Give tsgo a moment to process.
-				await new Promise<void>(r => setTimeout(r, 150));
-
 				try {
 					for (const candidate of outsideCandidates) {
 						const line0 = Math.max(0, candidate.span.start.line - 1);
 						const character0 = Math.max(0, candidate.span.start.column);
-						const hover = await session.lsp.request('textDocument/hover', {
-							textDocument: { uri },
-							position: { line: line0, character: character0 },
-						});
+						const hover = await requestHover({ uri, line: line0, character: character0 });
 						const hoverText = stringifyHover(hover);
 						const flag = shouldFlagUnknownOrAny(hoverText);
 
@@ -145,10 +161,7 @@ export const runTsgoUnknownProofChecks = async (input: {
 					for (const candidate of boundaryUsageCandidates) {
 						const line0 = Math.max(0, candidate.span.start.line - 1);
 						const character0 = Math.max(0, candidate.span.start.column);
-						const hover = await session.lsp.request('textDocument/hover', {
-							textDocument: { uri },
-							position: { line: line0, character: character0 },
-						});
+						const hover = await requestHover({ uri, line: line0, character: character0 });
 						const hoverText = stringifyHover(hover);
 						const flag = shouldFlagUnknownOrAny(hoverText);
 

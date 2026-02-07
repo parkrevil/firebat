@@ -67,6 +67,168 @@ type TsgoLspSession = {
   readonly note?: string;
 };
 
+type SharedTsgoSessionEntry = {
+  readonly key: string;
+  readonly session: TsgoLspSession;
+  readonly lsp: LspConnection;
+  refCount: number;
+  queue: Promise<unknown>;
+  idleTimer: Timer | null;
+  note?: string;
+};
+
+const sharedTsgoSessions = new Map<string, SharedTsgoSessionEntry>();
+
+const DEFAULT_SHARED_IDLE_MS = 5_000;
+
+const makeSharedKey = (input: { cwd: string; command: string; args: string[] }): string => {
+  return `${input.command}\n${input.args.join('\u0000')}\n${input.cwd}`;
+};
+
+const closeSharedEntry = async (entry: SharedTsgoSessionEntry): Promise<void> => {
+  try {
+    await entry.lsp.close();
+  } catch {
+    // ignore
+  }
+};
+
+const scheduleSharedIdleClose = (entry: SharedTsgoSessionEntry): void => {
+  if (entry.idleTimer) {
+    try {
+      clearTimeout(entry.idleTimer);
+    } catch {
+      // ignore
+    }
+  }
+
+  entry.idleTimer = setTimeout(() => {
+    const current = sharedTsgoSessions.get(entry.key);
+
+    if (!current) {
+      return;
+    }
+
+    if (current.refCount > 0) {
+      return;
+    }
+
+    sharedTsgoSessions.delete(entry.key);
+    void closeSharedEntry(current);
+  }, DEFAULT_SHARED_IDLE_MS);
+};
+
+const acquireSharedTsgoSession = async (input: {
+  root: string;
+  tsconfigPath?: string;
+}): Promise<{ ok: true; entry: SharedTsgoSessionEntry } | { ok: false; error: string }> => {
+  const cwd = input.tsconfigPath
+    ? path.dirname(path.resolve(process.cwd(), input.tsconfigPath))
+    : path.isAbsolute(input.root)
+      ? input.root
+      : path.resolve(process.cwd(), input.root);
+  const resolved = await tryResolveTsgoCommand(cwd);
+
+  if (!resolved) {
+    return {
+      ok: false,
+      error:
+        'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `npx` is available).',
+    };
+  }
+
+  const key = makeSharedKey({ cwd, command: resolved.command, args: resolved.args });
+  const existing = sharedTsgoSessions.get(key);
+
+  if (existing) {
+    existing.refCount += 1;
+
+    if (existing.idleTimer) {
+      try {
+        clearTimeout(existing.idleTimer);
+      } catch {
+        // ignore
+      }
+
+      existing.idleTimer = null;
+    }
+
+    return { ok: true, entry: existing };
+  }
+
+  const lsp = await LspConnection.start({ cwd, command: resolved.command, args: resolved.args });
+
+  try {
+    const rootUri = pathToFileURL(cwd).toString();
+    const initializeResult = await lsp.request('initialize', {
+      processId: null,
+      rootUri,
+      capabilities: {},
+      workspaceFolders: [{ uri: rootUri, name: path.basename(cwd) }],
+    });
+
+    await lsp.notify('initialized', {});
+
+    const session: TsgoLspSession = {
+      lsp,
+      cwd,
+      rootUri,
+      initializeResult,
+      ...(resolved.note !== undefined ? { note: resolved.note } : {}),
+    };
+
+    const entry: SharedTsgoSessionEntry = {
+      key,
+      session,
+      lsp,
+      refCount: 1,
+      queue: Promise.resolve(undefined),
+      idleTimer: null,
+      ...(resolved.note !== undefined ? { note: resolved.note } : {}),
+    };
+
+    sharedTsgoSessions.set(key, entry);
+
+    return { ok: true, entry };
+  } catch (error) {
+    try {
+      await lsp.close();
+    } catch {
+      // ignore
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+
+    return { ok: false, error: message };
+  }
+};
+
+const releaseSharedTsgoSession = (entry: SharedTsgoSessionEntry): void => {
+  entry.refCount = Math.max(0, entry.refCount - 1);
+
+  if (entry.refCount === 0) {
+    scheduleSharedIdleClose(entry);
+  }
+};
+
+const runInSharedTsgoSession = async <T>(
+  entry: SharedTsgoSessionEntry,
+  fn: (session: TsgoLspSession) => Promise<T>,
+): Promise<T> => {
+  // Serialize operations to avoid didOpen/didClose interleaving across callers.
+  const task = entry.queue.then(() => fn(entry.session));
+  entry.queue = task.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  try {
+    return await task;
+  } finally {
+    releaseSharedTsgoSession(entry);
+  }
+};
+
 const fileUrlToPathSafe = (uri: string): string => {
   try {
     return fileURLToPath(uri);
@@ -158,9 +320,11 @@ const buildLspMessage = (payload: unknown): Uint8Array => {
 
 class LspConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
-  private readonly writer: WritableStreamDefaultWriter<Uint8Array>;
+  private readonly stdin: { write: (chunk: any) => any; flush?: () => any; end?: () => any };
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  private readonly notificationHandlers = new Map<string, Set<(params: any) => void>>();
+  private readonly anyNotificationHandlers = new Set<(method: string, params: any) => void>();
   private readonly readerLoop: Promise<void>;
 
   private constructor(proc: ReturnType<typeof Bun.spawn>) {
@@ -172,12 +336,89 @@ class LspConnection {
 
     const stdin: unknown = proc.stdin;
 
-    if (typeof (stdin as any)?.getWriter !== 'function') {
-      throw new Error('tsgo stdin does not support getWriter()');
+    // Bun.spawn({ stdin: 'pipe' }) returns a FileSink (write/flush/end), not a Web WritableStream.
+    if (typeof (stdin as any)?.write !== 'function') {
+      throw new Error('tsgo stdin does not support write()');
     }
 
-    this.writer = (stdin as WritableStream<Uint8Array>).getWriter();
+    this.stdin = stdin as any;
     this.readerLoop = this.startReadLoop();
+  }
+
+  private writeToStdin(payload: Uint8Array): void {
+    try {
+      this.stdin.write(payload);
+      if (typeof this.stdin.flush === 'function') {
+        this.stdin.flush();
+      }
+    } catch {
+      // ignore write failures; the request will eventually fail when the connection closes
+    }
+  }
+
+  private respondToServerRequest(input: { id: string | number; method: string; params: any }): void {
+    const { id, method, params } = input;
+
+    const ok = (result: unknown): void => {
+      this.writeToStdin(
+        buildLspMessage({
+          jsonrpc: '2.0',
+          id,
+          result,
+        }),
+      );
+    };
+
+    const err = (code: number, message: string): void => {
+      this.writeToStdin(
+        buildLspMessage({
+          jsonrpc: '2.0',
+          id,
+          error: { code, message },
+        }),
+      );
+    };
+
+    try {
+      // tsgo uses client/registerCapability early and will block if we don't respond.
+      if (method === 'client/registerCapability' || method === 'client/unregisterCapability') {
+        ok(null);
+        return;
+      }
+
+      // Some servers request configuration values after initialization.
+      if (method === 'workspace/configuration') {
+        const items = Array.isArray(params?.items) ? params.items : [];
+        ok(items.map(() => null));
+        return;
+      }
+
+      if (method === 'workspace/workspaceFolders') {
+        ok(null);
+        return;
+      }
+
+      if (method === 'window/workDoneProgress/create') {
+        ok(null);
+        return;
+      }
+
+      if (method === 'window/showMessageRequest') {
+        ok(null);
+        return;
+      }
+
+      // Best-effort fallback: for common LSP "client-side" request namespaces, respond with null.
+      if (method.startsWith('client/') || method.startsWith('workspace/') || method.startsWith('window/')) {
+        ok(null);
+        return;
+      }
+
+      err(-32601, `Method not found: ${method}`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      err(-32603, message.length > 0 ? message : 'Internal error');
+    }
   }
 
   static async start(opts: { cwd: string; command: string; args: string[] }): Promise<LspConnection> {
@@ -199,15 +440,14 @@ class LspConnection {
 
     const stream = this.proc.stdout as unknown as ReadableStream<Uint8Array>;
     const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = Buffer.alloc(0);
 
     const readMore = async (): Promise<boolean> => {
       const { value, done } = await reader.read();
 
       if (done) {return false;}
 
-      buffer += decoder.decode(value, { stream: true });
+      buffer = Buffer.concat([buffer, Buffer.from(value)]);
 
       return true;
     };
@@ -217,12 +457,12 @@ class LspConnection {
 
       if (headerEnd === -1) {return null;}
 
-      const header = buffer.slice(0, headerEnd);
+      const header = buffer.subarray(0, headerEnd).toString('utf8');
       const m = /Content-Length:\s*(\d+)/i.exec(header);
 
       if (!m) {
         // Can't parse header; drop until after headerEnd.
-        buffer = buffer.slice(headerEnd + 4);
+        buffer = Buffer.from(buffer.subarray(headerEnd + 4));
 
         return null;
       }
@@ -232,9 +472,9 @@ class LspConnection {
 
       if (buffer.length < bodyStart + len) {return null;}
 
-      const body = buffer.slice(bodyStart, bodyStart + len);
+      const body = buffer.subarray(bodyStart, bodyStart + len).toString('utf8');
 
-      buffer = buffer.slice(bodyStart + len);
+      buffer = Buffer.from(buffer.subarray(bodyStart + len));
 
       try {
         return JSON.parse(body);
@@ -247,19 +487,55 @@ class LspConnection {
       let msg = parseOne();
 
       while (msg) {
-        if (msg && typeof msg === 'object' && 'id' in msg) {
-          const id = Number((msg).id);
+        if (msg && typeof msg === 'object' && 'id' in msg && 'method' in msg) {
+          const id = (msg as any).id;
+          const method = typeof (msg as any).method === 'string' ? (msg as any).method : '';
+          const params = (msg as any).params;
+
+          if ((typeof id === 'string' || typeof id === 'number') && method.length > 0) {
+            this.respondToServerRequest({ id, method, params });
+          }
+        } else if (msg && typeof msg === 'object' && 'id' in msg) {
+          const id = Number((msg as any).id);
           const pending = this.pending.get(id);
 
           if (pending) {
             this.pending.delete(id);
 
-            if ('error' in msg && (msg).error) {
-              const err = (msg).error;
+            if ('error' in msg && (msg as any).error) {
+              const err = (msg as any).error;
 
               pending.reject(new Error(typeof err?.message === 'string' ? err.message : 'LSP error'));
             } else {
-              pending.resolve((msg).result);
+              pending.resolve((msg as any).result);
+            }
+          }
+        }
+
+        // Notifications (JSON-RPC: method without id)
+        if (msg && typeof msg === 'object' && 'method' in msg && !('id' in msg)) {
+          const method = typeof (msg as any).method === 'string' ? (msg as any).method : '';
+          const params = (msg as any).params;
+
+          if (method.length > 0) {
+            for (const handler of this.anyNotificationHandlers) {
+              try {
+                handler(method, params);
+              } catch {
+                // ignore
+              }
+            }
+
+            const handlers = this.notificationHandlers.get(method);
+
+            if (handlers) {
+              for (const handler of handlers) {
+                try {
+                  handler(params);
+                } catch {
+                  // ignore
+                }
+              }
             }
           }
         }
@@ -292,7 +568,7 @@ class LspConnection {
       this.pending.set(id, { resolve: resolve as any, reject });
     });
 
-    await this.writer.write(buildLspMessage(payload));
+    this.writeToStdin(buildLspMessage(payload));
 
     return  p;
   }
@@ -304,7 +580,46 @@ class LspConnection {
       ...(params !== undefined ? { params } : {}),
     };
 
-    await this.writer.write(buildLspMessage(payload));
+    this.writeToStdin(buildLspMessage(payload));
+  }
+
+  onNotification(method: string, handler: (params: any) => void): () => void {
+    const normalized = method.trim();
+
+    if (normalized.length === 0) {
+      return () => undefined;
+    }
+
+    const existing = this.notificationHandlers.get(normalized);
+    const set = existing ?? new Set<(params: any) => void>();
+
+    set.add(handler);
+
+    if (!existing) {
+      this.notificationHandlers.set(normalized, set);
+    }
+
+    return () => {
+      const current = this.notificationHandlers.get(normalized);
+
+      if (!current) {
+        return;
+      }
+
+      current.delete(handler);
+
+      if (current.size === 0) {
+        this.notificationHandlers.delete(normalized);
+      }
+    };
+  }
+
+  onAnyNotification(handler: (method: string, params: any) => void): () => void {
+    this.anyNotificationHandlers.add(handler);
+
+    return () => {
+      this.anyNotificationHandlers.delete(handler);
+    };
   }
 
   async close(): Promise<void> {
@@ -316,7 +631,16 @@ class LspConnection {
     }
 
     try {
-      await this.writer.close();
+      this.notificationHandlers.clear();
+      this.anyNotificationHandlers.clear();
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof this.stdin.end === 'function') {
+        this.stdin.end();
+      }
     } catch {
       // ignore
     }
@@ -586,47 +910,15 @@ export const withTsgoLspSession = async <T>(
   fn: (session: TsgoLspSession) => Promise<T>,
 ): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string } > => {
   try {
-    const cwd = input.tsconfigPath
-      ? path.dirname(path.resolve(process.cwd(), input.tsconfigPath))
-      : path.isAbsolute(input.root)
-        ? input.root
-        : path.resolve(process.cwd(), input.root);
-    const resolved = await tryResolveTsgoCommand(cwd);
+    const acquired = await acquireSharedTsgoSession(input);
 
-    if (!resolved) {
-      return {
-        ok: false,
-        error:
-          'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `npx` is available).',
-      };
+    if (!acquired.ok) {
+      return { ok: false, error: acquired.error };
     }
 
-    const lsp = await LspConnection.start({ cwd, command: resolved.command, args: resolved.args });
+    const value = await runInSharedTsgoSession(acquired.entry, fn);
 
-    try {
-      const rootUri = pathToFileURL(cwd).toString();
-      const initializeResult = await lsp.request('initialize', {
-        processId: null,
-        rootUri,
-        capabilities: {},
-        workspaceFolders: [{ uri: rootUri, name: path.basename(cwd) }],
-      });
-
-      await lsp.notify('initialized', {});
-
-      const session: TsgoLspSession = {
-        lsp,
-        cwd,
-        rootUri,
-        initializeResult,
-        ...(resolved.note !== undefined ? { note: resolved.note } : {}),
-      };
-      const value = await fn(session);
-
-      return { ok: true, value, ...(resolved.note ? { note: resolved.note } : {}) };
-    } finally {
-      await lsp.close();
-    }
+    return { ok: true, value, ...(acquired.entry.note ? { note: acquired.entry.note } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 

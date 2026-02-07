@@ -264,7 +264,7 @@ export interface TypecheckItem {
 
 export interface TypecheckAnalysis {
   readonly status: TypecheckStatus;
-  readonly tool: 'tsc';
+  readonly tool: 'tsgo';
   readonly exitCode: number | null;
   readonly items: ReadonlyArray<TypecheckItem>;
 }

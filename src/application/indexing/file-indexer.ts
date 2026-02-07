@@ -14,16 +14,18 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
   await runWithConcurrency(input.targets, concurrency, async filePath => {
     try {
-      const stats = await Bun.file(filePath).stat();
+      const file = Bun.file(filePath);
+      const [stats, existing] = await Promise.all([
+        file.stat(),
+        input.repository.getFile({ projectKey: input.projectKey, filePath }),
+      ]);
       const mtimeMs = stats.mtimeMs;
       const size = stats.size;
-      const existing = await input.repository.getFile({ projectKey: input.projectKey, filePath });
 
       if (existing && existing.mtimeMs === mtimeMs && existing.size === size) {
         return;
       }
 
-      const file = Bun.file(filePath);
       const content = await file.text();
       const contentHash = hashString(content);
 

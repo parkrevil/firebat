@@ -311,12 +311,8 @@
   "ignorePatterns": [
     "node_modules",
     "**/node_modules/**",
-    "**/*.d.ts",
-    ".bunner",
-    "**/.bunner/**",
     "dist",
     "**/dist/**",
-    ".dependency-cruiser.cjs",
-    "commitlint.config.cjs",
+    "**/*.d.ts",
   ],
 }

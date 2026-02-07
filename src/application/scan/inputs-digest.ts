@@ -1,4 +1,5 @@
 import { hashString } from '../../engine/hasher';
+import { runWithConcurrency } from '../../engine/promise-pool';
 import type { FileIndexRepository } from '../../ports/file-index.repository';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
@@ -14,32 +15,47 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
   const normalizedTargets = [...input.targets].map(normalizePath).sort();
   const parts: string[] = [...(input.extraParts ?? [])];
 
-  for (const filePath of normalizedTargets) {
-    try {
-      const entry = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+  const partsByIndex: string[] = new Array<string>(normalizedTargets.length);
+  const concurrency = Math.max(1, Math.min(16, normalizedTargets.length));
 
-      if (entry) {
-        parts.push(`file:${filePath}:${entry.contentHash}`);
+  await runWithConcurrency(
+    normalizedTargets.map((filePath, index) => ({ filePath, index })),
+    concurrency,
+    async item => {
+      const { filePath, index } = item;
 
-        continue;
+      try {
+        const entry = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+
+        if (entry) {
+          partsByIndex[index] = `file:${filePath}:${entry.contentHash}`;
+
+          return;
+        }
+
+        const filePathAbs = filePath;
+        const file = Bun.file(filePathAbs);
+        const [stats, content] = await Promise.all([file.stat(), file.text()]);
+        const contentHash = hashString(content);
+
+        await input.fileIndexRepository.upsertFile({
+          projectKey: input.projectKey,
+          filePath,
+          mtimeMs: stats.mtimeMs,
+          size: stats.size,
+          contentHash,
+        });
+
+        partsByIndex[index] = `file:${filePath}:${contentHash}`;
+      } catch {
+        partsByIndex[index] = `missing:${filePath}`;
       }
+    },
+  );
 
-      const stats = await Bun.file(filePath).stat();
-      const content = await Bun.file(filePath).text();
-      const contentHash = hashString(content);
-
-      await input.fileIndexRepository.upsertFile({
-        projectKey: input.projectKey,
-        filePath,
-        mtimeMs: stats.mtimeMs,
-        size: stats.size,
-        contentHash,
-      });
-
-      parts.push(`file:${filePath}:${contentHash}`);
-    } catch {
-      parts.push(`missing:${filePath}`);
-    }
+  for (let i = 0; i < partsByIndex.length; i += 1) {
+    const part = partsByIndex[i];
+    parts.push(part ?? `missing:${normalizedTargets[i] ?? ''}`);
   }
 
   return hashString(parts.join('|'));

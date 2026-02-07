@@ -112,9 +112,6 @@ const withOpenDocument = async <T>(
     text,
   });
 
-  // Give tsgo a moment to process.
-  await new Promise<void>(r => setTimeout(r, 150));
-
   try {
     return await fn({ uri, text, lines: splitLines(text) });
   } finally {

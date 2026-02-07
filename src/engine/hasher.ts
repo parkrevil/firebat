@@ -1,23 +1,15 @@
-import xxhash, { type XXHashAPI } from 'xxhash-wasm';
-
-let hasherInstance: XXHashAPI | null = null;
-const hasherPromise: Promise<XXHashAPI> = xxhash();
-
 const initHasher = async (): Promise<void> => {
-  hasherInstance ??= await hasherPromise;
+  // No-op: Bun.hash is always available at runtime.
+};
+
+const toU64Hex = (value: bigint): string => {
+  const unsigned = BigInt.asUintN(64, value);
+  return unsigned.toString(16).padStart(16, '0');
 };
 
 const hashString = (input: string): string => {
-  if (!hasherInstance) {
-    throw new Error('Hasher not initialized. Call initHasher() first.');
-  }
-
-  return hasherInstance.h64ToString(input);
+  // Bun.hash.xxHash64 returns bigint.
+  return toU64Hex(Bun.hash.xxHash64(input));
 };
-
-// Firebat's detectors are currently synchronous (tests call them synchronously).
-// Ensure the wasm hasher is initialized at module-load time so callers don't need
-// to remember to call initHasher().
-await initHasher();
 
 export { initHasher, hashString };

@@ -1,7 +1,9 @@
 import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
-import type { SourceSpan, TypecheckAnalysis, TypecheckItem, TypecheckRunResult } from '../../types';
+import type { SourceSpan, TypecheckAnalysis, TypecheckItem } from '../../types';
+
+import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
@@ -28,7 +30,7 @@ const createEmptySpan = (): SourceSpan => ({
 
 const createEmptyTypecheck = (): TypecheckAnalysis => ({
   status: 'ok',
-  tool: 'tsc',
+  tool: 'tsgo',
   exitCode: 0,
   items: [],
 });
@@ -53,108 +55,65 @@ const buildCodeFrame = (
   };
 };
 
-const parseTscDiagnostics = (cwd: string, combinedOutput: string): ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> => {
-  const items: Array<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> = [];
-  // Common tsc formats:
-  // - path/to/file.ts(12,34): error TS2322: message
-  // - path/to/file.ts:12:34 - error TS2322: message
-  const parenPattern = /^(.*)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.*)$/;
-  const colonPattern = /^(.*):(\d+):(\d+)\s+-\s+(error|warning)\s+(TS\d+):\s+(.*)$/;
-  let lastIndex = -1;
+type LspPosition = { readonly line: number; readonly character: number };
 
-  for (const rawLine of combinedOutput.split(/\r?\n/)) {
-    const line = rawLine.trimEnd();
+type LspRange = { readonly start: LspPosition; readonly end: LspPosition };
 
-    if (line.trim().length === 0) {
-      continue;
-    }
-
-    const parenMatch = line.match(parenPattern);
-    const colonMatch = parenMatch ? null : line.match(colonPattern);
-    const match = parenMatch ?? colonMatch;
-
-    if (!match) {
-      // Some environments wrap long tsc messages across lines. If so, keep appending
-      // to the previous diagnostic message to preserve information.
-      if (lastIndex >= 0) {
-        const previous = items[lastIndex];
-
-        if (previous) {
-          items[lastIndex] = {
-            ...previous,
-            message: `${previous.message} ${line.trim()}`.trim(),
-          };
-        }
-      }
-
-      continue;
-    }
-
-    const filePart = match[1] ?? '';
-    const linePart = match[2] ?? '1';
-    const columnPart = match[3] ?? '1';
-    const severityPart = match[4] ?? 'error';
-    const codePart = match[5] ?? 'TS0';
-    const messagePart = match[6] ?? '';
-    const filePath = filePart.length > 0 ? toAbsolutePath(cwd, filePart) : '';
-    const lineNumber = Math.max(1, Number.parseInt(linePart, 10) || 1);
-    const columnNumber = Math.max(1, Number.parseInt(columnPart, 10) || 1);
-    const severity = severityPart === 'warning' ? 'warning' : 'error';
-    const code = codePart;
-    const message = messagePart.trim();
-
-    items.push({
-      severity,
-      code,
-      message,
-      filePath,
-      span: {
-        start: {
-          line: lineNumber,
-          column: columnNumber,
-        },
-        end: {
-          line: lineNumber,
-          column: columnNumber,
-        },
-      },
-    });
-
-    lastIndex = items.length - 1;
-  }
-
-  return items;
+type LspDiagnostic = {
+  readonly range: LspRange;
+  readonly severity?: number;
+  readonly code?: string | number;
+  readonly message: string;
+  readonly source?: string;
 };
 
-const runTsc = async (cwd: string): Promise<TypecheckRunResult> => {
-  try {
-    const proc = Bun.spawn({
-      cmd: ['bunx', 'tsc', '--pretty', 'false', '--noEmit'],
-      cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    const exitCode = await proc.exited;
+type PublishDiagnosticsParams = {
+  readonly uri: string;
+  readonly diagnostics: ReadonlyArray<LspDiagnostic>;
+};
 
-    return {
-      exitCode,
-      combinedOutput: `${stdout}\n${stderr}`.trim(),
-      status: 'ok',
-    };
-  } catch (err) {
-    // Most commonly: tsgo binary not found (ENOENT)
-    const message = err instanceof Error ? err.message : String(err);
+const toSpanFromRange = (range: LspRange): SourceSpan => {
+  return {
+    start: { line: range.start.line + 1, column: range.start.character + 1 },
+    end: { line: range.end.line + 1, column: range.end.character + 1 },
+  };
+};
 
-    return {
-      exitCode: null,
-      combinedOutput: message,
-      status: 'unavailable',
-    };
+const toSeverity = (severity: number | undefined): 'error' | 'warning' => {
+  // LSP DiagnosticSeverity: 1=Error, 2=Warning, 3=Information, 4=Hint
+  return severity === 2 ? 'warning' : 'error';
+};
+
+const toCodeText = (code: string | number | undefined, source: string | undefined): string => {
+  if (typeof code === 'string' && code.length > 0) {
+    return code;
   }
+
+  if (typeof code === 'number' && Number.isFinite(code)) {
+    return String(code);
+  }
+
+  if (typeof source === 'string' && source.length > 0) {
+    return source;
+  }
+
+  return 'TS';
+};
+
+const convertPublishDiagnosticsToTypecheckItems = (
+  params: PublishDiagnosticsParams,
+): ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> => {
+  const filePath = lspUriToFilePath(params.uri);
+
+  return (params.diagnostics ?? []).map(diag => {
+    return {
+      severity: toSeverity(diag.severity),
+      code: toCodeText(diag.code, diag.source),
+      message: typeof diag.message === 'string' ? diag.message.trim() : String(diag.message),
+      filePath,
+      span: toSpanFromRange(diag.range),
+    };
+  });
 };
 
 const attachCodeFrames = (
@@ -199,38 +158,116 @@ const attachCodeFrames = (
 };
 
 const analyzeTypecheck = async (program: ReadonlyArray<ParsedFile>): Promise<TypecheckAnalysis> => {
-  const cwd = process.cwd();
-  const result = await runTsc(cwd);
+  const root = process.cwd();
 
-  if (result.status !== 'ok') {
+  try {
+    const result = await withTsgoLspSession<ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>>>(
+      { root },
+      async session => {
+        const collected: Array<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> = [];
+        const openUris: string[] = [];
+        const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
+        let lastUpdateAt = 0;
+
+        const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: any) => {
+          if (!raw || typeof raw !== 'object') {
+            return;
+          }
+
+          const uri = typeof raw.uri === 'string' ? raw.uri : '';
+          const diagnostics = Array.isArray(raw.diagnostics) ? (raw.diagnostics as ReadonlyArray<LspDiagnostic>) : [];
+
+          if (uri.length === 0) {
+            return;
+          }
+
+          lastUpdateAt = Date.now();
+          seenByUri.set(uri, diagnostics);
+        });
+
+        try {
+          // Open all program files so tsgo can compute diagnostics.
+          for (const file of program) {
+            const opened = await openTsDocument({ lsp: session.lsp, filePath: file.filePath, text: file.sourceText });
+            openUris.push(opened.uri);
+          }
+
+          const settleMs = 200;
+          const maxWaitMs = Math.min(10_000, Math.max(500, program.length * 3));
+          const start = Date.now();
+          const expectedUriCount = openUris.length;
+
+          // Wait until diagnostics stop changing (or a max timeout).
+          while (Date.now() - start < maxWaitMs) {
+            if (lastUpdateAt === 0) {
+              // No diagnostics yet; wait a short baseline.
+              await new Promise<void>(r => setTimeout(r, 25));
+              continue;
+            }
+
+            const stableForMs = Date.now() - lastUpdateAt;
+            const gotAllUris = expectedUriCount > 0 && seenByUri.size >= expectedUriCount;
+
+            if (stableForMs >= settleMs && (gotAllUris || Date.now() - start >= 250)) {
+              break;
+            }
+
+            await new Promise<void>(r => setTimeout(r, 25));
+          }
+
+          for (const [uri, diagnostics] of seenByUri) {
+            collected.push(
+              ...convertPublishDiagnosticsToTypecheckItems({
+                uri,
+                diagnostics,
+              }),
+            );
+          }
+
+          return collected;
+        } finally {
+          dispose();
+          await Promise.all(openUris.map(uri => session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined)));
+        }
+      },
+    );
+
+    if (!result.ok) {
+      return {
+        status: 'unavailable',
+        tool: 'tsgo',
+        exitCode: null,
+        items: [],
+      };
+    }
+
+    const itemsWithFrames = attachCodeFrames(program, result.value);
+    const items = [...itemsWithFrames].sort((left: TypecheckItem, right: TypecheckItem) => {
+      if (left.filePath !== right.filePath) {
+        return left.filePath.localeCompare(right.filePath);
+      }
+
+      if (left.span.start.line !== right.span.start.line) {
+        return left.span.start.line - right.span.start.line;
+      }
+
+      return left.span.start.column - right.span.start.column;
+    });
+
     return {
-      status: result.status,
-      tool: 'tsc',
-      exitCode: result.exitCode,
+      status: 'ok',
+      tool: 'tsgo',
+      exitCode: 0,
+      items,
+    };
+  } catch {
+    return {
+      status: 'failed',
+      tool: 'tsgo',
+      exitCode: null,
       items: [],
     };
   }
-
-  const parsed = parseTscDiagnostics(cwd, result.combinedOutput);
-  const itemsWithFrames = attachCodeFrames(program, parsed);
-  const items = [...itemsWithFrames].sort((left: TypecheckItem, right: TypecheckItem) => {
-    if (left.filePath !== right.filePath) {
-      return left.filePath.localeCompare(right.filePath);
-    }
-
-    if (left.span.start.line !== right.span.start.line) {
-      return left.span.start.line - right.span.start.line;
-    }
-
-    return left.span.start.column - right.span.start.column;
-  });
-
-  return {
-    status: 'ok',
-    tool: 'tsc',
-    exitCode: result.exitCode,
-    items,
-  };
 };
 
-export { analyzeTypecheck, createEmptyTypecheck, parseTscDiagnostics };
+export { analyzeTypecheck, createEmptyTypecheck, convertPublishDiagnosticsToTypecheckItems };

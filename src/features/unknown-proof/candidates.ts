@@ -702,7 +702,41 @@ export const stringifyHover = (hover: unknown): string => {
 
 	const contents = (hover as any).contents;
 	const raw = contents !== undefined ? contents : hover;
-	const parts = collectStringsFromNode(raw);
 
-	return parts.join('\n');
+	const extract = (value: any): string[] => {
+		if (value === null || value === undefined) {
+			return [];
+		}
+
+		if (typeof value === 'string') {
+			return [value];
+		}
+
+		if (Array.isArray(value)) {
+			return value.flatMap(v => extract(v));
+		}
+
+		if (typeof value === 'object') {
+			// MarkupContent: { kind: 'plaintext'|'markdown', value: string }
+			if (typeof (value as any).value === 'string') {
+				return [(value as any).value];
+			}
+
+			// MarkedString: { language: string, value: string }
+			if (typeof (value as any).language === 'string' && typeof (value as any).value === 'string') {
+				return [(value as any).value];
+			}
+		}
+
+		return [];
+	};
+
+	// LSP Hover.contents can be (string | MarkupContent | MarkedString | (string|MarkedString)[])
+	const parts = extract(raw);
+	if (parts.length > 0) {
+		return parts.join('\n');
+	}
+
+	// Fallback for odd server shapes.
+	return collectStringsFromNode(raw).join('\n');
 };

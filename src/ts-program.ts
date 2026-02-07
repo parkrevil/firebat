@@ -1,8 +1,6 @@
 import type { ParsedFile } from './engine/types';
 import type { FirebatProgramConfig } from './interfaces';
 
-import { parseSource } from './engine/parse-source';
-
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const shouldIncludeFile = (filePath: string): boolean => {
@@ -24,34 +22,144 @@ const shouldIncludeFile = (filePath: string): boolean => {
 // Replaces createFirebatProgram to return ParsedFile[]
 export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   const fileNames = config.targets;
-  // Filter and parse
-  const results: ParsedFile[] = [];
+  const hardware =
+    typeof navigator === 'object' && typeof navigator.hardwareConcurrency === 'number'
+      ? Math.max(1, Math.floor(navigator.hardwareConcurrency))
+      : 4;
 
-  for (const filePath of fileNames) {
+  const eligible: Array<{ filePath: string; index: number }> = [];
+
+  for (let i = 0; i < fileNames.length; i += 1) {
+    const filePath = fileNames[i];
+
+    if (filePath === undefined) {
+      continue;
+    }
+
     if (!shouldIncludeFile(filePath)) {
       continue;
     }
 
-    const fileHandle: ReturnType<typeof Bun.file> = Bun.file(filePath);
+    eligible.push({ filePath, index: i });
+  }
 
-    if (!(await fileHandle.exists())) {
-      // Warning?
-      continue;
+  if (eligible.length === 0) {
+    return [];
+  }
+
+  const workerSource = `
+    import { parseSync } from "oxc-parser";
+    declare var self: Worker;
+
+    self.onmessage = async (event: MessageEvent) => {
+      const filePath = (event as any)?.data?.filePath;
+      if (typeof filePath !== "string" || filePath.length === 0) {
+        postMessage({ ok: false, filePath: String(filePath ?? ""), error: "invalid filePath" });
+        return;
+      }
+
+      try {
+        const sourceText = await Bun.file(filePath).text();
+        const parsed = parseSync(filePath, sourceText);
+
+        // NOTE: parsed.comments is not structured-cloneable in Bun workers.
+        postMessage({ ok: true, filePath, sourceText, program: parsed.program, errors: parsed.errors });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        postMessage({ ok: false, filePath, error: message });
+      }
+    };
+  `;
+
+  const workerFile = new File([workerSource], 'firebat-parse-worker.ts', { type: 'text/javascript' });
+  const workerUrl = URL.createObjectURL(workerFile);
+  const workerCount = Math.max(1, Math.min(hardware, eligible.length));
+  const workers: Worker[] = [];
+
+  try {
+    for (let i = 0; i < workerCount; i += 1) {
+      workers.push(new Worker(workerUrl));
+    }
+
+    const resultsByIndex: Array<ParsedFile | undefined> = new Array<ParsedFile | undefined>(fileNames.length);
+    let cursor = 0;
+
+    const requestParse = async (worker: Worker, filePath: string): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const w: any = worker as any;
+        const prevOnMessage = w.onmessage;
+        const prevOnError = w.onerror;
+
+        w.onmessage = (event: any) => {
+          w.onmessage = prevOnMessage;
+          w.onerror = prevOnError;
+          resolve(event?.data);
+        };
+
+        w.onerror = (event: any) => {
+          w.onmessage = prevOnMessage;
+          w.onerror = prevOnError;
+          reject(event);
+        };
+
+        worker.postMessage({ filePath });
+      });
+    };
+
+    const runners = workers.map(worker =>
+      (async (): Promise<void> => {
+        while (true) {
+          const current = cursor;
+          cursor += 1;
+
+          const item = eligible[current];
+
+          if (!item) {
+            return;
+          }
+
+          try {
+            const data = await requestParse(worker, item.filePath);
+
+            if (!data || typeof data !== 'object' || data.ok !== true) {
+              const errText = typeof data?.error === 'string' ? data.error : 'unknown error';
+              console.error(`[firebat] Failed to parse ${item.filePath}: ${errText}`);
+              continue;
+            }
+
+            resultsByIndex[item.index] = {
+              filePath: item.filePath,
+              program: data.program,
+              errors: Array.isArray(data.errors) ? data.errors : [],
+              comments: [],
+              sourceText: typeof data.sourceText === 'string' ? data.sourceText : '',
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[firebat] Failed to parse ${item.filePath}: ${message}`);
+          }
+        }
+      })(),
+    );
+
+    await Promise.all(runners);
+
+    return resultsByIndex.filter((v): v is ParsedFile => v !== undefined);
+  } finally {
+    for (const worker of workers) {
+      try {
+        worker.terminate();
+      } catch {
+        // ignore
+      }
     }
 
     try {
-      const sourceText = await fileHandle.text();
-      const parsed = parseSource(filePath, sourceText);
-
-      results.push(parsed);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-
-      console.error(`[firebat] Failed to parse ${filePath}: ${message}`);
+      URL.revokeObjectURL(workerUrl);
+    } catch {
+      // ignore
     }
   }
-
-  return results;
 };
 
 // End of file

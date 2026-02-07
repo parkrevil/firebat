@@ -33,7 +33,6 @@
     "oxfmt": "^0.28.0",
     "oxlint": "^1.43.0",
     "oxlint-tsgolint": "^0.11.4",
-    "xxhash-wasm": "^1.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -46,7 +45,6 @@
     "drizzle-kit": "^0.31.8",
     "husky": "^9.1.7",
     "knip": "^5.83.0",
-    "lint-staged": "^16.2.7",
-    "typescript": "^5.9.3"
+    "lint-staged": "^16.2.7"
   }
 }

@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { readdir } from 'node:fs/promises';
 
 import { hashString } from '../../engine/hasher';
+import { runWithConcurrency } from '../../engine/promise-pool';
 import type { FileIndexRepository } from '../../ports/file-index.repository';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
@@ -38,37 +39,50 @@ const computeProjectInputsDigest = async (input: {
   fileIndexRepository: FileIndexRepository;
 }): Promise<string> => {
   const files = await listProjectInputFiles(input.rootAbs);
-  const parts: string[] = [];
 
-  for (const filePathAbs of files) {
-    const filePath = normalizePath(filePathAbs);
+  const partsByIndex: string[] = new Array<string>(files.length);
+  const concurrency = Math.max(1, Math.min(16, files.length));
 
-    try {
-      const existing = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+  await runWithConcurrency(
+    files.map((filePathAbs, index) => ({ filePathAbs, index })),
+    concurrency,
+    async item => {
+      const filePath = normalizePath(item.filePathAbs);
 
-      if (existing) {
-        parts.push(`project:${filePath}:${existing.contentHash}`);
+      try {
+        const existing = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
 
-        continue;
+        if (existing) {
+          partsByIndex[item.index] = `project:${filePath}:${existing.contentHash}`;
+
+          return;
+        }
+
+        const file = Bun.file(item.filePathAbs);
+        const [stats, content] = await Promise.all([file.stat(), file.text()]);
+        const contentHash = hashString(content);
+
+        await input.fileIndexRepository.upsertFile({
+          projectKey: input.projectKey,
+          filePath,
+          mtimeMs: stats.mtimeMs,
+          size: stats.size,
+          contentHash,
+        });
+
+        partsByIndex[item.index] = `project:${filePath}:${contentHash}`;
+      } catch {
+        // Non-existent project files are part of the digest too (stable miss).
+        partsByIndex[item.index] = `project:missing:${filePath}`;
       }
+    },
+  );
 
-      const stats = await Bun.file(filePathAbs).stat();
-      const content = await Bun.file(filePathAbs).text();
-      const contentHash = hashString(content);
-
-      await input.fileIndexRepository.upsertFile({
-        projectKey: input.projectKey,
-        filePath,
-        mtimeMs: stats.mtimeMs,
-        size: stats.size,
-        contentHash,
-      });
-
-      parts.push(`project:${filePath}:${contentHash}`);
-    } catch {
-      // Non-existent project files are part of the digest too (stable miss).
-      parts.push(`project:missing:${filePath}`);
-    }
+  const parts: string[] = [];
+  for (let i = 0; i < partsByIndex.length; i += 1) {
+    const part = partsByIndex[i];
+    const filePath = normalizePath(files[i] ?? '');
+    parts.push(part ?? `project:missing:${filePath}`);
   }
 
   return hashString(parts.sort().join('|'));
