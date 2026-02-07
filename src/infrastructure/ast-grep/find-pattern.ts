@@ -1,6 +1,7 @@
 import { ts } from '@ast-grep/napi';
 
 import type { SourceSpan } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
 
 interface AstGrepMatch {
   readonly filePath: string;
@@ -40,9 +41,12 @@ const findPatternInFiles = async (input: {
   rule?: unknown;
   matcher?: unknown;
   ruleName?: string;
+  logger: FirebatLogger;
 }): Promise<ReadonlyArray<AstGrepMatch>> => {
   const { ruleId, matcher } = resolveMatcher(input);
   const results: AstGrepMatch[] = [];
+
+  input.logger.debug('ast-grep: searching pattern', { ruleId, fileCount: input.targets.length });
 
   for (const filePath of input.targets) {
     const code = await Bun.file(filePath).text();
@@ -71,7 +75,13 @@ const findPatternInFiles = async (input: {
         ruleId,
       });
     }
+
+    if (nodes.length > 0) {
+      input.logger.trace('ast-grep: matches in file', { filePath, matchCount: nodes.length });
+    }
   }
+
+  input.logger.debug('ast-grep: search complete', { totalMatches: results.length });
 
   return results;
 };

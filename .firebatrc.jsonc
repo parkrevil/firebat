@@ -1,17 +1,10 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
 
-  "logging": {
-    "level": "error",
-    "filePath": "./.firebat/firebat.log"
-  },
 
-  "output": {
-    "format": "text",
-    "exitOnFindings": true
-  },
 
   "features": {
+    "barrel-policy": true,
     "format": true,
     "unknown-proof": true,
     "exact-duplicates": { "minSize": "auto" },

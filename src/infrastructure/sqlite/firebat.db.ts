@@ -6,6 +6,7 @@ import { Database } from 'bun:sqlite';
 
 import { createDrizzleDb, type FirebatDrizzleDb } from './drizzle-db';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
+import type { FirebatLogger } from '../../ports/logger';
 
 const DB_RELATIVE_PATH = '.firebat/firebat.sqlite';
 
@@ -31,16 +32,21 @@ const ormPromisesByPath = new Map<string, Promise<FirebatDrizzleDb>>();
 
 interface DbOpenInput {
   readonly rootAbs?: string;
+  readonly logger: FirebatLogger;
 }
 
-const getDb = async (input?: DbOpenInput): Promise<Database> => {
-  const rootAbs = input?.rootAbs ?? process.cwd();
+const getDb = async (input: DbOpenInput): Promise<Database> => {
+  const rootAbs = input.rootAbs ?? process.cwd();
   const dbFilePath = resolveDbPath(rootAbs);
   const existing = dbPromisesByPath.get(dbFilePath);
 
   if (existing) {
+    input.logger.trace('sqlite: reusing cached DB connection', { dbFilePath });
+
     return existing;
   }
+
+  input.logger.debug('sqlite: opening database', { dbFilePath });
 
   const created = ensureDatabase(dbFilePath);
 
@@ -49,21 +55,27 @@ const getDb = async (input?: DbOpenInput): Promise<Database> => {
   return created;
 };
 
-const getOrmDb = async (input?: DbOpenInput): Promise<FirebatDrizzleDb> => {
-  const rootAbs = input?.rootAbs ?? process.cwd();
+const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
+  const rootAbs = input.rootAbs ?? process.cwd();
   const dbFilePath = resolveDbPath(rootAbs);
   const existing = ormPromisesByPath.get(dbFilePath);
 
   if (existing) {
+    input.logger.trace('sqlite: reusing cached ORM connection', { dbFilePath });
+
     return existing;
   }
 
   const created = (async (): Promise<FirebatDrizzleDb> => {
-    const sqlite = await getDb({ rootAbs });
+    const sqlite = await getDb({ rootAbs, logger: input.logger });
     const orm = createDrizzleDb(sqlite);
     const migrationsFolder = path.resolve(import.meta.dir, './migrations');
 
+    input.logger.debug('sqlite: running migrations', { migrationsFolder });
+
     migrate(orm, { migrationsFolder });
+
+    input.logger.trace('sqlite: ORM ready');
 
     return orm;
   })();

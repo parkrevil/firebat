@@ -13,9 +13,7 @@ const createNoiseFunction = (functionName: string, literal: number): string => {
 
 const hasDuplicateGroup = (signatures: readonly string[]): boolean => {
   return signatures.some(signature => {
-    const parts = signature.split('::');
-    const itemsPart = parts[1] ?? '';
-    const items = itemsPart.split(';').filter(item => item.length > 0);
+    const items = signature.split(';').filter(item => item.length > 0);
 
     return items.length >= 2;
   });

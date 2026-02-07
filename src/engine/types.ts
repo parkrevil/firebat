@@ -51,8 +51,6 @@ export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | bool
 
 export type NodeValueVisitor = (value: NodeValue) => void;
 
-export type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string) => TItem | null;
-
 export type OxcNodePredicate = (node: Node) => boolean;
 
 export type OxcNodeWalker = (node: Node) => boolean;

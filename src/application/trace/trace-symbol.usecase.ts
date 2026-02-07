@@ -17,6 +17,7 @@ import { indexTargets } from '../indexing/file-indexer';
 import { computeInputsDigest } from '../scan/inputs-digest';
 import { computeCacheNamespace } from '../scan/cache-namespace';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
+import type { FirebatLogger } from '../../ports/logger';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 
@@ -64,6 +65,7 @@ interface TraceSymbolInput {
   readonly symbol: string;
   readonly tsconfigPath?: string;
   readonly maxDepth?: number;
+  readonly logger: FirebatLogger;
 }
 
 interface TraceSymbolOutput {
@@ -260,13 +262,17 @@ const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> =
 };
 
 const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolOutput> => {
+  const { logger } = input;
+
+  logger.debug('trace-symbol: start', { entryFile: input.entryFile, symbol: input.symbol, maxDepth: input.maxDepth });
+
   await initHasher();
 
   const ctx = await resolveRuntimeContextFromCwd();
 
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
   const artifactRepository = createHybridArtifactRepository({
     memory: createInMemoryArtifactRepository(),
     sqlite: createSqliteArtifactRepository(orm),
@@ -277,7 +283,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   });
   const relatedFiles = await resolveRelatedFiles(input);
 
-  await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4 });
+  logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });
+
+  await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4, logger });
 
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
 
@@ -301,8 +309,12 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   });
 
   if (cached) {
+    logger.debug('trace-symbol: cache hit', { artifactKey });
+
     return cached;
   }
+
+  logger.debug('trace-symbol: cache miss — running tsgo trace');
 
   const tsgoRequest: Parameters<typeof runTsgoTraceSymbol>[0] = {
     entryFile: relatedFiles[0] ?? input.entryFile,
@@ -311,6 +323,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
   };
   const result = await runTsgoTraceSymbol(tsgoRequest);
+
+  logger.trace('trace-symbol: tsgo result', { ok: result.ok, error: result.error });
+
   const normalized = normalizeTrace({ structured: result.structured as JsonValue | undefined });
   const outputBase = {
     ok: result.ok,

@@ -16,6 +16,7 @@ import { indexTargets } from '../indexing/file-indexer';
 import { discoverDefaultTargets } from '../../target-discovery';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
+import type { FirebatLogger } from '../../ports/logger';
 
 const resolveRoot = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -39,10 +40,11 @@ const toAbsoluteTargets = async (rootAbs: string, targets: ReadonlyArray<string>
 
 interface RepositoryContext {
   readonly rootAbs: string;
+  readonly logger: FirebatLogger;
 }
 
 const getRepositories = async (ctx: RepositoryContext) => {
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger: ctx.logger });
   const fileIndexRepository = createHybridFileIndexRepository({
     memory: createInMemoryFileIndexRepository(),
     sqlite: createSqliteFileIndexRepository(orm),
@@ -58,6 +60,7 @@ const getRepositories = async (ctx: RepositoryContext) => {
 export interface IndexSymbolsInput {
   readonly root?: string;
   readonly targets?: ReadonlyArray<string>;
+  readonly logger: FirebatLogger;
 }
 
 export interface IndexSymbolsResult {
@@ -72,23 +75,31 @@ export interface SearchSymbolFromIndexInput {
   readonly root?: string;
   readonly query: string;
   readonly limit?: number;
+  readonly logger: FirebatLogger;
 }
 
 export interface RootOnlyInput {
   readonly root?: string;
+  readonly logger: FirebatLogger;
 }
 
 export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<IndexSymbolsResult> => {
+  const { logger } = input;
+
+  logger.debug('symbol-index: start', { root: input.root, targetCount: input.targets?.length });
+
   await initHasher();
 
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = resolveRoot(input.root);
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { fileIndexRepository, symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
+  const { fileIndexRepository, symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger });
   const targets = await toAbsoluteTargets(rootAbs, input.targets);
 
-  await indexTargets({ projectKey, targets, repository: fileIndexRepository, concurrency: 8 });
+  logger.trace('symbol-index: indexing targets', { count: targets.length });
+
+  await indexTargets({ projectKey, targets, repository: fileIndexRepository, concurrency: 8, logger });
 
   let indexedFiles = 0;
   let skippedFiles = 0;
@@ -137,6 +148,8 @@ export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<Ind
     }
   }
 
+  logger.debug('symbol-index: complete', { indexedFiles, skippedFiles, symbolsIndexed, parseErrors });
+
   return {
     ok: true,
     indexedFiles,
@@ -151,7 +164,7 @@ export const searchSymbolFromIndexUseCase = async (input: SearchSymbolFromIndexI
   const rootAbs = resolveRoot(input.root);
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger: input.logger });
 
   return symbolIndexRepository.search({ projectKey, query: input.query, ...(input.limit !== undefined ? { limit: input.limit } : {}) });
 };
@@ -161,7 +174,7 @@ export const getIndexStatsFromIndexUseCase = async (input: RootOnlyInput): Promi
   const rootAbs = resolveRoot(input.root);
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger: input.logger });
 
   return symbolIndexRepository.getStats({ projectKey });
 };
@@ -171,7 +184,7 @@ export const clearIndexUseCase = async (input: RootOnlyInput): Promise<void> => 
   const rootAbs = resolveRoot(input.root);
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger: input.logger });
 
   await symbolIndexRepository.clearProject({ projectKey });
 };

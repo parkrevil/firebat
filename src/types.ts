@@ -70,11 +70,9 @@ export interface DuplicateItem {
   readonly header: string;
   readonly filePath: string;
   readonly span: SourceSpan;
-  readonly size: number;
 }
 
 export interface DuplicateGroup {
-  readonly fingerprint: string;
   readonly items: ReadonlyArray<DuplicateItem>;
 }
 
@@ -117,7 +115,6 @@ export interface StructuralDuplicatesAnalysis {
 
 export interface NestingMetrics {
   readonly depth: number;
-  readonly decisionPoints: number;
 }
 
 export interface NestingItem {
@@ -245,8 +242,7 @@ export interface LintDiagnostic {
   readonly message: string;
   readonly code?: string;
   readonly severity: LintSeverity;
-  readonly line?: number;
-  readonly column?: number;
+  readonly span: SourceSpan;
 }
 
 export interface LintAnalysis {
@@ -262,8 +258,7 @@ export interface FormatAnalysis {
   readonly tool: 'oxfmt';
   readonly exitCode?: number;
   readonly error?: string;
-  readonly rawStdout?: string;
-  readonly rawStderr?: string;
+  readonly fileCount?: number;
 }
 
 export interface TypecheckRunResult {
@@ -286,6 +281,7 @@ export interface TypecheckAnalysis {
   readonly status: TypecheckStatus;
   readonly tool: 'tsgo';
   readonly exitCode: number | null;
+  readonly error?: string;
   readonly items: ReadonlyArray<TypecheckItem>;
 }
 
@@ -327,25 +323,25 @@ export interface FirebatMeta {
 
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
-  readonly waste: ReadonlyArray<WasteFinding>;
-  readonly barrelPolicy: BarrelPolicyAnalysis;
-  readonly unknownProof: UnknownProofAnalysis;
-  readonly format: FormatAnalysis;
-  readonly lint: LintAnalysis;
-  readonly typecheck: TypecheckAnalysis;
-  readonly dependencies: DependencyAnalysis;
-  readonly coupling: CouplingAnalysis;
+  readonly 'waste': ReadonlyArray<WasteFinding>;
+  readonly 'barrel-policy': BarrelPolicyAnalysis;
+  readonly 'unknown-proof': UnknownProofAnalysis;
+  readonly 'format': FormatAnalysis;
+  readonly 'lint': LintAnalysis;
+  readonly 'typecheck': TypecheckAnalysis;
+  readonly 'dependencies': DependencyAnalysis;
+  readonly 'coupling': CouplingAnalysis;
   readonly 'structural-duplicates': StructuralDuplicatesAnalysis;
-  readonly nesting: NestingAnalysis;
-  readonly earlyReturn: EarlyReturnAnalysis;
-  readonly noop: NoopAnalysis;
-  readonly apiDrift: ApiDriftAnalysis;
-  readonly forwarding: ForwardingAnalysis;
+  readonly 'nesting': NestingAnalysis;
+  readonly 'early-return': EarlyReturnAnalysis;
+  readonly 'noop': NoopAnalysis;
+  readonly 'api-drift': ApiDriftAnalysis;
+  readonly 'forwarding': ForwardingAnalysis;
 }
 
 export interface FirebatReport {
   readonly meta: FirebatMeta;
-  readonly analyses: FirebatAnalyses;
+  readonly analyses: Partial<FirebatAnalyses>;
 }
 
 export interface NodeHeader {

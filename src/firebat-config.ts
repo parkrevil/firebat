@@ -1,22 +1,12 @@
 import * as z from 'zod';
 
-const LOG_LEVELS = ['silent', 'error', 'warn', 'info'] as const;
+const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;
 
 export type FirebatLogLevel = (typeof LOG_LEVELS)[number];
 
 type FeatureToggle<TOptions extends object> = false | true | TOptions;
 
 type InheritableFeatureToggle<TOptions extends object> = false | 'inherit' | true | TOptions;
-
-export interface FirebatLoggingConfig {
-	readonly filePath?: string | undefined;
-	readonly level?: FirebatLogLevel | undefined;
-}
-
-export interface FirebatOutputConfig {
-	readonly format?: 'text' | 'json' | undefined;
-	readonly exitOnFindings?: boolean | undefined;
-}
 
 export interface FirebatExactDuplicatesConfig {
 	readonly minSize?: number | 'auto' | undefined;
@@ -82,8 +72,6 @@ export type FirebatMcpConfig = 'inherit' | FirebatMcpConfigObject;
 
 export interface FirebatConfig {
 	readonly $schema?: string | undefined;
-	readonly logging?: FirebatLoggingConfig | undefined;
-	readonly output?: FirebatOutputConfig | undefined;
 	readonly features?: FirebatFeaturesConfig | undefined;
 	readonly mcp?: FirebatMcpConfig | undefined;
 }
@@ -91,20 +79,6 @@ export interface FirebatConfig {
 export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 	.object({
 		$schema: z.string().optional(),
-		logging: z
-			.object({
-				filePath: z.string().optional(),
-				level: z.enum(LOG_LEVELS).optional(),
-			})
-			.strict()
-			.optional(),
-		output: z
-			.object({
-				format: z.enum(['text', 'json']).optional(),
-				exitOnFindings: z.boolean().optional(),
-			})
-			.strict()
-			.optional(),
 		features: z
 			.object({
 				'exact-duplicates': z

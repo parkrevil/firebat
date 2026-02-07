@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseSource } from '../../engine/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
 import { indexSymbolsUseCase } from '../symbol-index/symbol-index.usecases';
+import type { FirebatLogger } from '../../ports/logger';
 
 type SourcePosition = { line: number; column: number };
 
@@ -83,8 +84,8 @@ const writeIfChanged = async (filePath: string, prevText: string, nextText: stri
   return true;
 };
 
-const reindexFile = async (rootAbs: string, fileAbs: string): Promise<void> => {
-  await indexSymbolsUseCase({ root: rootAbs, targets: [fileAbs] }).catch(() => undefined);
+const reindexFile = async (rootAbs: string, fileAbs: string, logger: FirebatLogger): Promise<void> => {
+  await indexSymbolsUseCase({ root: rootAbs, targets: [fileAbs], logger }).catch(() => undefined);
 };
 
 export const replaceRangeUseCase = async (input: {
@@ -95,9 +96,12 @@ export const replaceRangeUseCase = async (input: {
   endLine: number;
   endColumn: number;
   newText: string;
+  logger: FirebatLogger;
 }): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  input.logger.debug('edit:replaceRange', { filePath: input.relativePath, startLine: input.startLine, endLine: input.endLine });
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
@@ -111,7 +115,7 @@ export const replaceRangeUseCase = async (input: {
     const next = prev.slice(0, startOff) + input.newText + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs);}
+    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -125,9 +129,12 @@ export const replaceRegexUseCase = async (input: {
   regex: string;
   repl: string;
   allowMultipleOccurrences?: boolean;
+  logger: FirebatLogger;
 }): Promise<EditResult & { matchCount?: number }> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  input.logger.debug('edit:replaceRegex', { filePath: input.relativePath, regex: input.regex });
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
@@ -145,7 +152,7 @@ export const replaceRegexUseCase = async (input: {
     const next = prev.replace(re, input.repl);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs);}
+    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
 
     return { ok: true, filePath: fileAbs, changed, matchCount: matches.length };
   } catch (error) {
@@ -158,9 +165,12 @@ export const insertBeforeSymbolUseCase = async (input: {
   namePath: string;
   relativePath: string;
   body: string;
+  logger: FirebatLogger;
 }): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  input.logger.debug('edit:insertBefore', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
@@ -175,7 +185,7 @@ export const insertBeforeSymbolUseCase = async (input: {
     const next = prev.slice(0, startOff) + insertion + prev.slice(startOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs);}
+    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -188,9 +198,12 @@ export const insertAfterSymbolUseCase = async (input: {
   namePath: string;
   relativePath: string;
   body: string;
+  logger: FirebatLogger;
 }): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  input.logger.debug('edit:insertAfter', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
@@ -205,7 +218,7 @@ export const insertAfterSymbolUseCase = async (input: {
     const next = prev.slice(0, endOff) + insertion + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs);}
+    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -218,9 +231,12 @@ export const replaceSymbolBodyUseCase = async (input: {
   namePath: string;
   relativePath: string;
   body: string;
+  logger: FirebatLogger;
 }): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  input.logger.debug('edit:replaceSymbolBody', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
@@ -249,7 +265,7 @@ export const replaceSymbolBodyUseCase = async (input: {
     const next = prev.slice(0, startOff) + nextSegment + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs);}
+    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {

@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import type { FirebatLogger } from '../../ports/logger';
 
 interface TsgoTraceRequest {
   readonly entryFile: string;
@@ -906,21 +907,26 @@ export type { TsgoTraceRequest, TsgoTraceResult };
 export type { LspPosition, LspRange, LspLocation, LspLocationLink, TsgoLspSession };
 
 export const withTsgoLspSession = async <T>(
-  input: { root: string; tsconfigPath?: string },
+  input: { root: string; tsconfigPath?: string; logger: FirebatLogger },
   fn: (session: TsgoLspSession) => Promise<T>,
 ): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string } > => {
   try {
+    input.logger.debug('Acquiring tsgo LSP session', { root: input.root, tsconfigPath: input.tsconfigPath });
     const acquired = await acquireSharedTsgoSession(input);
 
     if (!acquired.ok) {
+      input.logger.warn(`tsgo LSP session unavailable: ${acquired.error}`);
       return { ok: false, error: acquired.error };
     }
 
+    input.logger.trace('tsgo LSP session acquired', { key: acquired.entry.key, refCount: acquired.entry.refCount, note: acquired.entry.note });
     const value = await runInSharedTsgoSession(acquired.entry, fn);
+    input.logger.trace('tsgo LSP session operation complete');
 
     return { ok: true, value, ...(acquired.entry.note ? { note: acquired.entry.note } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    input.logger.error(`tsgo LSP session error: ${message}`, undefined, error);
 
     return { ok: false, error: message };
   }

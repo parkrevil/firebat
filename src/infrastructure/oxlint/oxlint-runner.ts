@@ -2,13 +2,15 @@ import * as path from 'node:path';
 
 import * as z from 'zod';
 
+import type { SourceSpan } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
+
 interface OxlintDiagnostic {
   readonly filePath?: string;
   readonly message: string;
   readonly code?: string;
   readonly severity: 'error' | 'warning' | 'info';
-  readonly line?: number;
-  readonly column?: number;
+  readonly span: SourceSpan;
 }
 
 interface OxlintRunResult {
@@ -25,6 +27,7 @@ interface RunOxlintInput {
   readonly targets: ReadonlyArray<string>;
   readonly configPath?: string;
   readonly fix?: boolean;
+  readonly logger: FirebatLogger;
 }
 
 const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
@@ -99,15 +102,14 @@ const normalizeDiagnosticsFromParsed = (value: OxlintOutput): ReadonlyArray<Oxli
     const severityRaw = item.severity ?? item.level;
     const severity: OxlintDiagnostic['severity'] = severityRaw ?? 'warning';
     const filePath = item.filePath ?? item.path ?? item.file ?? item.filename;
-    const line = item.line ?? item.row ?? item.startLine;
-    const column = item.column ?? item.col ?? item.startColumn;
+    const line = item.line ?? item.row ?? item.startLine ?? 0;
+    const column = item.column ?? item.col ?? item.startColumn ?? 0;
     const normalized: OxlintDiagnostic = {
       message,
       severity,
+      span: { start: { line, column }, end: { line, column } },
       ...(filePath !== undefined ? { filePath } : {}),
       ...(code !== undefined ? { code } : {}),
-      ...(line !== undefined ? { line } : {}),
-      ...(column !== undefined ? { column } : {}),
     };
 
     out.push(normalized);
@@ -117,15 +119,22 @@ const normalizeDiagnosticsFromParsed = (value: OxlintOutput): ReadonlyArray<Oxli
 };
 
 const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
+  const { logger } = input;
+
+  logger.debug('oxlint: resolving command');
   const cmd = await tryResolveOxlintCommand();
 
   if (!cmd || cmd.length === 0) {
+    logger.warn('oxlint: command not found — lint tool unavailable');
+
     return {
       ok: false,
       tool: 'oxlint',
       error: 'oxlint is not available. Install it (or use a firebat build that bundles it) to enable the lint tool.',
     };
   }
+
+  logger.trace('oxlint: resolved command', { cmd: cmd[0] });
 
   const args: string[] = [];
 
@@ -143,6 +152,8 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   // NOTE: oxlint JSON output flags may differ by version. For now, treat stdout/stderr as raw,
   // but if stdout is valid JSON, attempt best-effort normalization.
   args.push(...input.targets);
+
+  logger.debug('oxlint: spawning process', { targetCount: input.targets.length, fix: input.fix ?? false, configPath: input.configPath });
 
   const proc = Bun.spawn({
     cmd: [...cmd, ...args],
@@ -174,6 +185,12 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
 
   const stdoutDiagnostics = parseDiagnostics(stdout);
   const diagnostics = stdoutDiagnostics.length > 0 ? stdoutDiagnostics : parseDiagnostics(stderr);
+
+  logger.debug('oxlint: process exited', { exitCode, diagnosticCount: diagnostics.length });
+
+  if (exitCode !== 0) {
+    logger.trace('oxlint: non-zero exit code (may indicate findings)', { exitCode });
+  }
 
   // Non-zero exit codes are expected when lint findings exist. Treat the run as successful
   // as long as the tool executed.

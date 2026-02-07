@@ -1,4 +1,6 @@
 import type { FormatAnalysis } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../ports/logger';
 
 import { runOxfmt } from '../../infrastructure/oxfmt/oxfmt-runner';
 
@@ -11,11 +13,14 @@ export const analyzeFormat = async (input: {
   readonly targets: ReadonlyArray<string>;
   readonly fix: boolean;
   readonly configPath?: string;
+  readonly logger?: FirebatLogger;
 }): Promise<FormatAnalysis> => {
+  const logger = input.logger ?? createNoopLogger();
   const result = await runOxfmt({
     targets: input.targets,
     mode: input.fix ? 'write' : 'check',
     ...(input.configPath !== undefined ? { configPath: input.configPath } : {}),
+    logger,
   });
 
   if (!result.ok) {
@@ -27,20 +32,20 @@ export const analyzeFormat = async (input: {
       tool: 'oxfmt',
       error,
       ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-      ...(typeof result.rawStdout === 'string' ? { rawStdout: result.rawStdout } : {}),
-      ...(typeof result.rawStderr === 'string' ? { rawStderr: result.rawStderr } : {}),
     };
   }
 
   if (!input.fix) {
     const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 0;
+    const fileCount = typeof result.rawStdout === 'string'
+      ? result.rawStdout.split('\n').filter(l => l.trim().length > 0).length
+      : undefined;
 
     return {
       status: exitCode === 0 ? 'ok' : 'needs-formatting',
       tool: 'oxfmt',
       ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-      ...(typeof result.rawStdout === 'string' ? { rawStdout: result.rawStdout } : {}),
-      ...(typeof result.rawStderr === 'string' ? { rawStderr: result.rawStderr } : {}),
+      ...(typeof fileCount === 'number' ? { fileCount } : {}),
     };
   }
 
@@ -48,7 +53,5 @@ export const analyzeFormat = async (input: {
     status: 'ok',
     tool: 'oxfmt',
     ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-    ...(typeof result.rawStdout === 'string' ? { rawStdout: result.rawStdout } : {}),
-    ...(typeof result.rawStderr === 'string' ? { rawStderr: result.rawStderr } : {}),
   };
 };

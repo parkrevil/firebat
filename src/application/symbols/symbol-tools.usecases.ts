@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 
 import { getIndexStatsFromIndexUseCase, searchSymbolFromIndexUseCase } from '../symbol-index/symbol-index.usecases';
+import type { FirebatLogger } from '../../ports/logger';
 
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -14,6 +15,7 @@ const resolveRootAbs = (root: string | undefined): string => {
 
 interface GetSymbolsOverviewInput {
   readonly root?: string;
+  readonly logger: FirebatLogger;
 }
 
 interface QuerySymbolsInput {
@@ -22,9 +24,12 @@ interface QuerySymbolsInput {
   readonly kind?: string | ReadonlyArray<string>;
   readonly file?: string;
   readonly limit?: number;
+  readonly logger: FirebatLogger;
 }
 
 export const getSymbolsOverviewUseCase = async (input: GetSymbolsOverviewInput) => {
+  input.logger.debug('symbols:overview');
+
   const rootAbs = resolveRootAbs(input.root);
   const stats = await getIndexStatsFromIndexUseCase({ root: rootAbs });
 
@@ -35,6 +40,7 @@ export const getSymbolsOverviewUseCase = async (input: GetSymbolsOverviewInput) 
 };
 
 export const querySymbolsUseCase = async (input: QuerySymbolsInput) => {
+  input.logger.debug('symbols:query', { query: input.query, kind: input.kind });
   const rootAbs = resolveRootAbs(input.root);
   const matches = await searchSymbolFromIndexUseCase({
     root: rootAbs,

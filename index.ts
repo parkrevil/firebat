@@ -5,26 +5,28 @@ import { runMcp } from './src/adapters/mcp/entry';
 
 import { appendFirebatLog } from './src/infra/logging';
 import { resolveFirebatRootFromCwd } from './src/root-resolver';
+import { createPrettyConsoleLogger } from './src/infrastructure/logging/pretty-console-logger';
 
 const main = async (): Promise<void> => {
 	const argv = Bun.argv.slice(2);
 	const subcommand = argv[0];
+	const logger = createPrettyConsoleLogger({ level: 'info', includeStack: false });
 
 	try {
 		if (subcommand === 'install' || subcommand === 'i') {
-			const exitCode = await runInstall(argv.slice(1));
+			const exitCode = await runInstall(argv.slice(1), logger);
 
 			process.exit(exitCode);
 		}
 
 		if (subcommand === 'update' || subcommand === 'u') {
-			const exitCode = await runUpdate(argv.slice(1));
+			const exitCode = await runUpdate(argv.slice(1), logger);
 
 			process.exit(exitCode);
 		}
 
 		if (subcommand === 'cache') {
-			const exitCode = await runCache(argv.slice(1));
+			const exitCode = await runCache(argv.slice(1), logger);
 
 			process.exit(exitCode);
 		}
@@ -52,7 +54,7 @@ const main = async (): Promise<void> => {
 			// ignore
 		}
 
-		console.error(message);
+		logger.error(message);
 
 		process.exit(1);
 	}

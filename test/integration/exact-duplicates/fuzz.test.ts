@@ -14,17 +14,13 @@ const createTypeAlias = (typeName: string, fieldName: string): string => {
 };
 
 const countDuplicateItems = (signature: string): number => {
-  const parts = signature.split('::');
-  const itemsPart = parts[1] ?? '';
-  const items = itemsPart.split(';').filter(item => item.length > 0);
+  const items = signature.split(';').filter(item => item.length > 0);
 
   return items.length;
 };
 
 const hasMutantMixedGroup = (signature: string, mutantFile: string): boolean => {
-  const parts = signature.split('::');
-  const itemsPart = parts[1] ?? '';
-  const items = itemsPart.split(';').filter(item => item.length > 0);
+  const items = signature.split(';').filter(item => item.length > 0);
   const hasMutant = items.some(item => item.startsWith(`${mutantFile}|`));
   const hasNonMutant = items.some(item => !item.startsWith(`${mutantFile}|`));
 

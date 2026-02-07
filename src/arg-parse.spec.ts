@@ -141,6 +141,18 @@ describe('arg-parse', () => {
     expect(result.explicit?.logLevel).toBe(true);
   });
 
+  it('should parse logStack when provided', () => {
+    // Arrange
+    let argv = ['--log-stack'];
+
+    // Act
+    let result = parseArgs(argv);
+
+    // Assert
+    expect(result.logStack).toBe(true);
+    expect(result.explicit?.logStack).toBe(true);
+  });
+
   
 
   it('should throw a validation error when an unknown option is provided', () => {

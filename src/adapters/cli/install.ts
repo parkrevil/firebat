@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import type { FirebatLogger } from '../../ports/logger';
 
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 
@@ -226,12 +227,79 @@ const ensureBaseSnapshot = async (input: {
   return { sha256, filePath };
 };
 
+const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+
+const H = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  gray: '\x1b[90m',
+  white: '\x1b[37m',
+} as const;
+
+const hc = (text: string, code: string, color: boolean): string => color ? `${code}${text}${H.reset}` : text;
+
+const writeStdout = (text: string): void => {
+  process.stdout.write(text + '\n');
+};
+
 const printInstallHelp = (): void => {
-  console.log(['firebat install', '', 'Usage:', '  firebat install [-y|--yes]', '  firebat i [-y|--yes]'].join('\n'));
+  const c = isTty();
+  const lines = [
+    '',
+    `  ${hc('\ud83d\udd25 firebat install', `${H.bold}${H.cyan}`, c)}`,
+    '',
+    `  ${hc('USAGE', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('$', H.dim, c)} firebat install ${hc('[options]', H.gray, c)}`,
+    `    ${hc('$', H.dim, c)} firebat i ${hc('[options]', H.gray, c)}`,
+    '',
+    `  ${hc('DESCRIPTION', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    Initializes firebat in the current project:`,
+    `    ${hc('\u2022', H.dim, c)} Creates ${hc('.firebatrc.jsonc', H.green, c)}, ${hc('.oxlintrc.jsonc', H.green, c)}, ${hc('.oxfmtrc.jsonc', H.green, c)}`,
+    `    ${hc('\u2022', H.dim, c)} Sets up ${hc('.firebat/', H.green, c)} directory with SQLite cache`,
+    `    ${hc('\u2022', H.dim, c)} Adds ${hc('.firebat/', H.green, c)} to ${hc('.gitignore', H.green, c)}`,
+    `    ${hc('\u2022', H.dim, c)} Never overwrites existing config files`,
+    '',
+    `  ${hc('OPTIONS', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('-y, --yes', `${H.bold}${H.green}`, c)}   Skip confirmation prompts`,
+    `    ${hc('-h, --help', `${H.bold}${H.green}`, c)}  Show this help`,
+    '',
+  ];
+  writeStdout(lines.join('\n'));
 };
 
 const printUpdateHelp = (): void => {
-  console.log(['firebat update', '', 'Usage:', '  firebat update [-y|--yes]', '  firebat u [-y|--yes]'].join('\n'));
+  const c = isTty();
+  const lines = [
+    '',
+    `  ${hc('\ud83d\udd25 firebat update', `${H.bold}${H.cyan}`, c)}`,
+    '',
+    `  ${hc('USAGE', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('$', H.dim, c)} firebat update ${hc('[options]', H.gray, c)}`,
+    `    ${hc('$', H.dim, c)} firebat u ${hc('[options]', H.gray, c)}`,
+    '',
+    `  ${hc('DESCRIPTION', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    Syncs config files with the latest firebat templates:`,
+    `    ${hc('\u2022', H.dim, c)} Adds new keys from updated templates`,
+    `    ${hc('\u2022', H.dim, c)} Removes keys no longer in templates`,
+    `    ${hc('\u2022', H.dim, c)} Preserves your customized values and comments`,
+    `    ${hc('\u2022', H.dim, c)} Requires a prior ${hc('firebat install', H.white, c)}`,
+    '',
+    `  ${hc('OPTIONS', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('-y, --yes', `${H.bold}${H.green}`, c)}   Skip confirmation prompts`,
+    `    ${hc('-h, --help', `${H.bold}${H.green}`, c)}  Show this help`,
+    '',
+  ];
+  writeStdout(lines.join('\n'));
 };
 
 type AssetSpec = Readonly<{ asset: string; dest: string }>;
@@ -242,10 +310,11 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.firebatrc.jsonc', dest: '.firebatrc.jsonc' },
 ];
 
-const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[]): Promise<number> => {
+const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   try {
     const { yes, help } = parseYesFlag(argv);
     void yes;
+    logger.debug(`${mode}: starting`, { args: argv.join(' ') });
 
     if (help) {
       if (mode === 'install') printInstallHelp();
@@ -256,6 +325,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     const ctx = await resolveRuntimeContextFromCwd();
     const rootAbs = ctx.rootAbs;
     const firebatDir = path.join(rootAbs, '.firebat');
+    logger.debug(`${mode} root: ${rootAbs}`);
 
     await mkdir(firebatDir, { recursive: true });
 
@@ -273,13 +343,14 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         templateText: loaded.text,
         templatePath: loaded.filePath,
       });
+      logger.trace(`Template loaded: ${item.asset} from ${loaded.filePath}`);
     }
 
     if (mode === 'update') {
       const manifestPath = path.join(firebatDir, 'install-manifest.json');
       const mf = Bun.file(manifestPath);
       if (!(await mf.exists())) {
-        console.error('[firebat] update aborted: no install manifest found. Run `firebat install` first.');
+        logger.error('update aborted: no install manifest found. Run `firebat install` first.');
         return 1;
       }
 
@@ -287,13 +358,13 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
       try {
         manifest = await mf.json();
       } catch {
-        console.error('[firebat] update aborted: install manifest is unreadable. Run `firebat install` first.');
+        logger.error('update aborted: install manifest is unreadable. Run `firebat install` first.');
         return 1;
       }
 
       const bases = manifest?.baseSnapshots;
       if (!bases || typeof bases !== 'object') {
-        console.error('[firebat] update aborted: no base snapshots found. Run `firebat install` first.');
+        logger.error('update aborted: no base snapshots found. Run `firebat install` first.');
         return 1;
       }
 
@@ -306,13 +377,13 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         const basePath = typeof baseMeta?.filePath === 'string' ? baseMeta.filePath : null;
 
         if (!basePath) {
-          console.error(`[firebat] update aborted: missing base snapshot for ${tpl.asset}. Run \`firebat install\` first.`);
+          logger.error(`update aborted: missing base snapshot for ${tpl.asset}. Run \`firebat install\` first.`);
           return 1;
         }
 
         const baseFile = Bun.file(basePath);
         if (!(await baseFile.exists())) {
-          console.error(`[firebat] update aborted: base snapshot not found for ${tpl.asset}. Run \`firebat install\` first.`);
+          logger.error(`update aborted: base snapshot not found for ${tpl.asset}. Run \`firebat install\` first.`);
           return 1;
         }
         const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
@@ -328,7 +399,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
           const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
           if (!synced.ok) {
-            console.error(`[firebat] update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
+            logger.error(`update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
             return 1;
           }
 
@@ -384,7 +455,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     const gitignoreUpdated = await ensureGitignoreHasFirebat(rootAbs);
 
     // DB warm-up (creates .firebat/firebat.sqlite + runs migrations)
-    await getOrmDb({ rootAbs });
+    await getOrmDb({ rootAbs, logger });
 
     const installManifestPath = path.join(firebatDir, 'install-manifest.json');
     const manifestOut = {
@@ -398,49 +469,48 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     await Bun.write(installManifestPath, JSON.stringify(manifestOut, null, 2) + '\n');
 
-    console.log(`[firebat] ${mode} root: ${rootAbs}`);
-    console.log(`[firebat] created/verified: ${firebatDir}`);
+    logger.info(`${mode} root: ${rootAbs}`);
+    logger.debug(`created/verified: ${firebatDir}`);
 
     if (gitignoreUpdated) {
-      console.log('[firebat] updated .gitignore: added .firebat/');
+      logger.info('updated .gitignore: added .firebat/');
     }
 
     if (mode === 'install') {
       const diffs = assetResults.filter(r => r.kind === 'skipped-exists-different');
       for (const r of assetResults) {
-        if (r.kind === 'installed') console.log(`[firebat] installed ${r.filePath}`);
-        else if (r.kind === 'skipped-exists-same') console.log(`[firebat] kept existing (same) ${r.filePath}`);
-        else console.log(`[firebat] kept existing (DIFFERENT) ${r.filePath}`);
+        if (r.kind === 'installed') { logger.info(`installed ${r.filePath}`); }
+        else if (r.kind === 'skipped-exists-same') { logger.debug(`kept existing (same) ${r.filePath}`); }
+        else { logger.warn(`kept existing (DIFFERENT) ${r.filePath}`); }
       }
       if (diffs.length > 0) {
-        console.log('[firebat] NOTE: Some files differ from the current templates. Per policy, install never overwrites.');
-        console.log(`[firebat] See ${installManifestPath} for template hashes and paths.`);
+        logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');
+        logger.info(`See ${installManifestPath} for template hashes and paths.`);
       }
     } else {
       if (assetResults.length === 0) {
-        console.log('[firebat] update: no changes');
+        logger.info('update: no changes');
       } else {
         for (const r of assetResults) {
-          console.log(`[firebat] updated ${r.filePath}`);
+          logger.info(`updated ${r.filePath}`);
         }
       }
     }
 
-    console.log('');
-    console.log('[firebat] MCP SSOT: If you register this project context in your MCP SSOT, agents can use it more proactively.');
+    logger.info('MCP SSOT: If you register this project context in your MCP SSOT, agents can use it more proactively.');
 
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(message);
+    logger.error(message, undefined, err);
     return 1;
   }
 };
 
-export const runInstall = async (argv: readonly string[] = []): Promise<number> => {
-  return runInstallLike('install', argv);
+export const runInstall = async (argv: readonly string[] = [], logger: FirebatLogger): Promise<number> => {
+  return runInstallLike('install', argv, logger);
 };
 
-export const runUpdate = async (argv: readonly string[] = []): Promise<number> => {
-  return runInstallLike('update', argv);
+export const runUpdate = async (argv: readonly string[] = [], logger: FirebatLogger): Promise<number> => {
+  return runInstallLike('update', argv, logger);
 };

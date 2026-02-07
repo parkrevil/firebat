@@ -59,7 +59,7 @@ function createTryCatchSource(): string {
 }
 
 describe('integration/early-return', () => {
-  it('should report guard clauses when early returns exist', () => {
+  it('should exclude guarded functions when no improvement suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -71,12 +71,10 @@ describe('integration/early-return', () => {
     let item = earlyReturn.items.find(entry => entry.header === 'complex');
 
     // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.earlyReturnCount).toBeGreaterThanOrEqual(2);
-    expect(item?.metrics.hasGuardClauses).toBe(true);
+    expect(item).toBeUndefined();
   });
 
-  it('should report a single return when the function is simple', () => {
+  it('should exclude simple functions when no suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -88,8 +86,7 @@ describe('integration/early-return', () => {
     let item = earlyReturn.items.find(entry => entry.header === 'simple');
 
     // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.earlyReturnCount).toBe(1);
+    expect(item).toBeUndefined();
   });
 
   it('should return no findings when input is empty', () => {
@@ -103,7 +100,7 @@ describe('integration/early-return', () => {
     expect(earlyReturn.items.length).toBe(0);
   });
 
-  it('should not mark guard clauses when else is present', () => {
+  it('should exclude if-else functions when no suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -115,8 +112,7 @@ describe('integration/early-return', () => {
     let item = earlyReturn.items.find(entry => entry.header === 'hasElse');
 
     // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.hasGuardClauses).toBe(false);
+    expect(item).toBeUndefined();
   });
 
   it('should count early returns when try/catch flows exist', () => {

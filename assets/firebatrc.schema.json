@@ -5,41 +5,6 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "logging": {
-      "type": "object",
-      "description": "Internal firebat logging (stderr threshold + optional log file sink).",
-      "additionalProperties": false,
-      "properties": {
-        "filePath": {
-          "type": "string",
-          "description": "Log file path (absolute or relative to project root)."
-        },
-        "level": {
-          "type": "string",
-          "description": "Minimum level to emit to stderr.",
-          "enum": ["silent", "error", "warn", "info"],
-          "default": "error"
-        }
-      }
-    },
-    "output": {
-      "type": "object",
-      "description": "CLI output + exit behavior defaults.",
-      "additionalProperties": false,
-      "properties": {
-        "format": {
-          "type": "string",
-          "enum": ["text", "json"],
-          "default": "text",
-          "description": "Default CLI output format (can be overridden by --format)."
-        },
-        "exitOnFindings": {
-          "type": "boolean",
-          "default": true,
-          "description": "When true, CLI exits non-zero if blocking findings exist (can be overridden by --no-exit)."
-        }
-      }
-    },
     "features": {
       "type": "object",
       "description": "Per-feature enable/disable + feature-specific options. false disables. true enables with defaults. An object enables with explicit options (empty objects are not allowed).",

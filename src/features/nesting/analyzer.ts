@@ -27,7 +27,7 @@ const isDecisionPoint = (nodeType: string): boolean => {
   );
 };
 
-const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: string): NestingItem | null => {
+const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: string, parent: Node | null): NestingItem | null => {
   const bodyValue = resolveFunctionBody(functionNode);
 
   if (bodyValue === null || bodyValue === undefined) {
@@ -76,7 +76,7 @@ const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: s
 
   visit(bodyValue as NodeValue, 0);
 
-  const header = getNodeHeader(functionNode);
+  const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
   const nestingScore = Math.max(0, maxDepth * 3 + decisionPoints);
   const nestingSuggestions: string[] = [];
@@ -99,7 +99,6 @@ const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: s
     span,
     metrics: {
       depth: maxDepth,
-      decisionPoints,
     },
     score: nestingScore,
     suggestions: nestingSuggestions,
@@ -112,7 +111,7 @@ const analyzeNesting = (files: ReadonlyArray<ParsedFile>): NestingAnalysis => {
   }
 
   return {
-    items: collectFunctionItems(files, analyzeFunctionNode),
+    items: collectFunctionItems(files, analyzeFunctionNode).filter(item => item.suggestions.length > 0),
   };
 };
 

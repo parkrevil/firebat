@@ -59,6 +59,7 @@ import * as path from 'node:path';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
 import type { FirebatConfig } from '../../firebat-config';
+import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
@@ -219,6 +220,13 @@ const runMcpServer = async (): Promise<void> => {
     // Best-effort: ignore config errors in MCP (no stdout logging).
   }
 
+  const logger = createPrettyConsoleLogger({
+    level: 'error',
+    includeStack: false,
+  });
+
+  logger.trace('MCP server: initializing', { root: ctx.rootAbs, hasConfig: config !== null });
+
   const server: any = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
@@ -228,7 +236,9 @@ const runMcpServer = async (): Promise<void> => {
   // Bootstrap: ensure symbol index is up-to-date once on server start.
   // Then keep it updated with best-effort directory watchers.
   try {
-    await indexSymbolsUseCase({ root: ctx.rootAbs });
+    logger.trace('MCP server: bootstrapping symbol index');
+
+    await indexSymbolsUseCase({ root: ctx.rootAbs, logger });
 
     const targets = await discoverDefaultTargets(ctx.rootAbs);
     const targetSet = new Set(targets.map(t => path.resolve(t)));
@@ -246,7 +256,7 @@ const runMcpServer = async (): Promise<void> => {
       const batch = Array.from(pending);
       pending.clear();
 
-      void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch }).catch(() => undefined);
+      void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
     };
 
     const scheduleFlush = (): void => {
@@ -329,7 +339,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
         help: false,
       };
-      const report = await scanUseCase(options);
+      const report = await scanUseCase(options, { logger });
 
       lastReport = report;
 
@@ -387,6 +397,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.rule !== undefined ? { rule: args.rule } : {}),
         ...(args.matcher !== undefined ? { matcher: args.matcher } : {}),
         ...(args.ruleName !== undefined ? { ruleName: args.ruleName } : {}),
+        logger,
       };
       const matches = await findPatternUseCase(request);
       const structured = { matches };
@@ -430,6 +441,7 @@ const runMcpServer = async (): Promise<void> => {
         symbol: args.symbol,
         ...(args.tsconfigPath !== undefined ? { tsconfigPath: args.tsconfigPath } : {}),
         ...(args.maxDepth !== undefined ? { maxDepth: args.maxDepth } : {}),
+        logger,
       };
       const structured = await traceSymbolUseCase(request);
 
@@ -466,6 +478,7 @@ const runMcpServer = async (): Promise<void> => {
       const request: Parameters<typeof runOxlint>[0] = {
         targets: args.targets,
         ...(args.configPath !== undefined ? { configPath: args.configPath } : {}),
+        logger,
       };
       const result = await runOxlint(request);
       const structured = {
@@ -537,7 +550,7 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof ListMemoriesInputSchema>) => {
-      const memories = await listMemoriesUseCase((args.root !== undefined ? { root: args.root } : {}));
+      const memories = await listMemoriesUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
       const structured = { memories };
 
       return {
@@ -567,6 +580,7 @@ const runMcpServer = async (): Promise<void> => {
       const rec = await readMemoryUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
+        logger,
       });
       const structured = rec ? { found: true, memoryKey: args.memoryKey, value: rec.value } : { found: false, memoryKey: args.memoryKey };
 
@@ -596,6 +610,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
         value: args.value,
+        logger,
       });
 
       const structured = { ok: true, memoryKey: args.memoryKey };
@@ -623,6 +638,7 @@ const runMcpServer = async (): Promise<void> => {
       await deleteMemoryUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
+        logger,
       });
 
       const structured = { ok: true, memoryKey: args.memoryKey };
@@ -662,6 +678,7 @@ const runMcpServer = async (): Promise<void> => {
       const result = await indexSymbolsUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         ...(args.targets !== undefined ? { targets: args.targets } : {}),
+        logger,
       });
       const totalMs = nowMs() - t0;
       const structured = { ...result, timings: { totalMs } };
@@ -708,6 +725,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.root !== undefined ? { root: args.root } : {}),
         query: args.query,
         ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        logger,
       });
       const structured = { matches };
 
@@ -746,6 +764,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.root !== undefined ? { root: args.root } : {}),
         query: args.query,
         ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        logger,
       });
       const structured = { matches };
 
@@ -773,7 +792,7 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof GetIndexStatsFromIndexInputSchema>) => {
-      const structured = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root } : {}));
+      const structured = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
@@ -795,7 +814,7 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof ClearIndexInputSchema>) => {
-      await clearIndexUseCase((args.root !== undefined ? { root: args.root } : {}));
+      await clearIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
 
       const structured = { ok: true };
 
@@ -825,7 +844,7 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
-      const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root } : {}));
+      const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
       const structured = { symbolIndex };
 
       return {
@@ -866,6 +885,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.character !== undefined ? { character: args.character } : {}),
         ...(args.target !== undefined ? { target: args.target } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -897,6 +917,7 @@ const runMcpServer = async (): Promise<void> => {
         line: args.line,
         symbolName: args.symbolName,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -934,6 +955,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.after !== undefined ? { after: args.after } : {}),
         ...(args.include_body !== undefined ? { include_body: args.include_body } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -965,6 +987,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
         ...(args.forceRefresh !== undefined ? { forceRefresh: args.forceRefresh } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -985,6 +1008,7 @@ const runMcpServer = async (): Promise<void> => {
       const structured = await getAllDiagnosticsUseCase({
         root: args.root,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1006,6 +1030,7 @@ const runMcpServer = async (): Promise<void> => {
         root: args.root,
         filePath: args.filePath,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1027,6 +1052,7 @@ const runMcpServer = async (): Promise<void> => {
         root: args.root,
         ...(args.query !== undefined && args.query.trim().length > 0 ? { query: args.query } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1058,6 +1084,7 @@ const runMcpServer = async (): Promise<void> => {
         line: args.line,
         ...(args.character !== undefined ? { character: args.character } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1089,6 +1116,7 @@ const runMcpServer = async (): Promise<void> => {
         line: args.line,
         ...(args.character !== undefined ? { character: args.character } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1110,6 +1138,7 @@ const runMcpServer = async (): Promise<void> => {
         root: args.root,
         filePath: args.filePath,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1143,6 +1172,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.endLine !== undefined ? { endLine: args.endLine } : {}),
         ...(args.includeKinds !== undefined ? { includeKinds: args.includeKinds } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1178,6 +1208,7 @@ const runMcpServer = async (): Promise<void> => {
         symbolName: args.symbolName,
         newName: args.newName,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1209,6 +1240,7 @@ const runMcpServer = async (): Promise<void> => {
         line: args.line,
         symbolName: args.symbolName,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1229,6 +1261,7 @@ const runMcpServer = async (): Promise<void> => {
       const structured = await checkCapabilitiesUseCase({
         root: args.root,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1260,7 +1293,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof ReplaceRangeInputSchema>) => {
-      const structured = await replaceRangeUseCase(args);
+      const structured = await replaceRangeUseCase({ ...args, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1295,6 +1328,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.allowMultipleOccurrences !== undefined
           ? { allowMultipleOccurrences: args.allowMultipleOccurrences }
           : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1312,7 +1346,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof ReplaceSymbolBodyInputSchema>) => {
-      const structured = await replaceSymbolBodyUseCase(args);
+      const structured = await replaceSymbolBodyUseCase({ ...args, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1329,7 +1363,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof InsertBeforeSymbolInputSchema>) => {
-      const structured = await insertBeforeSymbolUseCase(args);
+      const structured = await insertBeforeSymbolUseCase({ ...args, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1346,7 +1380,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof InsertAfterSymbolInputSchema>) => {
-      const structured = await insertAfterSymbolUseCase(args);
+      const structured = await insertAfterSymbolUseCase({ ...args, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1367,7 +1401,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ root: z.string(), index: z.any() }).strict(),
     },
     async (args: z.infer<typeof GetSymbolsOverviewInputSchema>) => {
-      const structured = await getSymbolsOverviewUseCase(args.root !== undefined ? { root: args.root } : {});
+      const structured = await getSymbolsOverviewUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1398,6 +1432,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.kind !== undefined ? { kind: args.kind } : {}),
         ...(args.file !== undefined ? { file: args.file } : {}),
         ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1433,6 +1468,7 @@ const runMcpServer = async (): Promise<void> => {
         ...(args.maxFiles !== undefined ? { maxFiles: args.maxFiles } : {}),
         ...(args.includePatterns !== undefined ? { includePatterns: args.includePatterns } : {}),
         ...(args.excludePatterns !== undefined ? { excludePatterns: args.excludePatterns } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
@@ -1450,7 +1486,7 @@ const runMcpServer = async (): Promise<void> => {
       outputSchema: z.object({ ok: z.boolean(), dependencies: z.array(z.string()).optional(), error: z.string().optional() }).strict(),
     },
     async (args: z.infer<typeof GetTypescriptDependenciesInputSchema>) => {
-      const structured = await getTypescriptDependenciesUseCase({ root: args.root });
+      const structured = await getTypescriptDependenciesUseCase({ root: args.root, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
     },
@@ -1505,6 +1541,7 @@ const runMcpServer = async (): Promise<void> => {
         filePath: args.filePath,
         symbolName: args.symbolName,
         ...(args.tsconfigPath !== undefined ? { tsconfigPath: args.tsconfigPath } : {}),
+        logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };

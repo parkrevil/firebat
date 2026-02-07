@@ -1,5 +1,7 @@
 import * as path from 'node:path';
 
+import type { FirebatLogger } from '../../ports/logger';
+
 interface OxfmtRunResult {
   readonly ok: boolean;
   readonly tool: 'oxfmt';
@@ -13,6 +15,7 @@ interface RunOxfmtInput {
   readonly targets: ReadonlyArray<string>;
   readonly configPath?: string;
   readonly mode: 'check' | 'write';
+  readonly logger: FirebatLogger;
 }
 
 const tryResolveOxfmtCommand = async (): Promise<string[] | null> => {
@@ -49,15 +52,22 @@ const tryResolveOxfmtCommand = async (): Promise<string[] | null> => {
 };
 
 const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
+  const { logger } = input;
+
+  logger.debug('oxfmt: resolving command');
   const cmd = await tryResolveOxfmtCommand();
 
   if (!cmd || cmd.length === 0) {
+    logger.warn('oxfmt: command not found — format tool unavailable');
+
     return {
       ok: false,
       tool: 'oxfmt',
       error: 'oxfmt is not available. Install it (or use a firebat build that bundles it) to enable the format tool.',
     };
   }
+
+  logger.trace('oxfmt: resolved command', { cmd: cmd[0] });
 
   const args: string[] = [];
 
@@ -74,6 +84,8 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
 
   args.push(...input.targets);
 
+  logger.debug('oxfmt: spawning process', { mode: input.mode, targetCount: input.targets.length });
+
   try {
     const proc = Bun.spawn({
       cmd: [...cmd, ...args],
@@ -89,6 +101,8 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
       proc.exited,
     ]);
 
+    logger.debug('oxfmt: process exited', { exitCode });
+
     return {
       ok: true,
       tool: 'oxfmt',
@@ -98,6 +112,8 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
+    logger.error(`oxfmt: spawn failed: ${message}`, undefined, err);
 
     return {
       ok: false,

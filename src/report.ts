@@ -1,451 +1,296 @@
 import * as path from 'node:path';
 
 import type {
-  ApiDriftGroup,
-  BarrelPolicyFinding,
-  CouplingHotspot,
-  DependencyAnalysis,
-  DependencyEdgeCutHint,
-  DependencyFanStat,
-  DuplicateGroup,
-  EarlyReturnItem,
-  ForwardingFinding,
   FirebatReport,
-  FormatAnalysis,
-  LintAnalysis,
-  NestingItem,
-  NoopFinding,
   OutputFormat,
-  TypecheckItem,
-  UnknownProofFinding,
-  WasteFinding,
 } from './types';
 
 const toPos = (line: number, column: number): string => `${line}:${column}`;
 
-const formatDuplicateGroupText = (group: DuplicateGroup): string => {
-  const lines: string[] = [];
+// ── Color helpers (stdout TTY-aware) ────────────────────────────────
+const isStdoutTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
 
-  lines.push(`[duplicates] ${group.items.length} item(s)`);
+const A = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
+  gray: '\x1b[90m',
+  white: '\x1b[37m',
+} as const;
 
-  for (const item of group.items) {
-    const rel = path.relative(process.cwd(), item.filePath);
-    const start = toPos(item.span.start.line, item.span.start.column);
+let _color = true;
+const cc = (text: string, code: string): string => _color ? `${code}${text}${A.reset}` : text;
 
-    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (size: ${item.size})`);
+const LINE = '─'.repeat(60);
+const THIN = '┄'.repeat(60);
+
+// ── Summary row helpers ─────────────────────────────────────────────
+interface SummaryRow { readonly label: string; readonly count: number; readonly emoji: string }
+
+const statusBadge = (count: number): string => {
+  if (count === 0) return cc('✓ clean', A.green);
+  return cc(`${count} finding${count === 1 ? '' : 's'}`, A.yellow);
+};
+
+const padLabel = (label: string, width: number): string => label.padEnd(width);
+
+const formatSummaryTable = (rows: ReadonlyArray<SummaryRow>): string[] => {
+  const out: string[] = [];
+  const maxLabel = Math.max(...rows.map(r => r.label.length));
+  for (const row of rows) {
+    const badge = statusBadge(row.count);
+    out.push(`  ${row.emoji}  ${padLabel(row.label, maxLabel)}  ${badge}`);
   }
-
-  return lines.join('\n');
+  return out;
 };
 
-const formatDuplicateGroupTextWithLabel = (label: string, group: DuplicateGroup): string => {
-  const lines: string[] = [];
-
-  lines.push(`[${label}] ${group.items.length} item(s)`);
-
-  for (const item of group.items) {
-    const rel = path.relative(process.cwd(), item.filePath);
-    const start = toPos(item.span.start.line, item.span.start.column);
-
-    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (size: ${item.size})`);
-  }
-
-  return lines.join('\n');
-};
-
-const formatWasteText = (finding: WasteFinding): string => {
-  const rel = path.relative(process.cwd(), finding.filePath);
-  const start = toPos(finding.span.start.line, finding.span.start.column);
-
-  return `[waste] ${finding.kind}: ${finding.label} @ ${rel}:${start}`;
-};
-
-const formatBarrelPolicyFindingText = (finding: BarrelPolicyFinding): string => {
-  const rel = path.relative(process.cwd(), finding.filePath);
-  const start = toPos(finding.span.start.line, finding.span.start.column);
-  const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? ` evidence=${finding.evidence}` : '';
-
-  return `  - ${finding.kind}: ${finding.message} @ ${rel}:${start}${evidence}`;
-};
-
-const formatDependencyFanStatText = (stat: DependencyFanStat): string => `  - ${stat.module}: ${stat.count}`;
-
-const formatDependencyEdgeCutHintText = (hint: DependencyEdgeCutHint): string => {
-  const score = typeof hint.score === 'number' ? hint.score : 0;
-  const reason = typeof hint.reason === 'string' ? hint.reason : '';
-
-  if (reason.length > 0) {
-    return `  - ${hint.from} -> ${hint.to} (score=${score}, reason=${reason})`;
-  }
-
-  return `  - ${hint.from} -> ${hint.to} (score=${score})`;
-};
-
-const formatDependenciesText = (analysis: DependencyAnalysis): string => {
-  const lines: string[] = [];
-
-  lines.push(
-    `[dependencies] cycles=${analysis.cycles.length} fanInTop=${analysis.fanInTop.length} fanOutTop=${analysis.fanOutTop.length} edgeCutHints=${analysis.edgeCutHints.length}`,
-  );
-
-  if (analysis.cycles.length > 0) {
-    lines.push('');
-    lines.push('[dependencies] cycles');
-
-    for (const cycle of analysis.cycles) {
-      lines.push(`  - ${cycle.path.join(' -> ')}`);
-    }
-  }
-
-  if (analysis.fanInTop.length > 0) {
-    lines.push('');
-    lines.push('[dependencies] fan-in top');
-
-    for (const stat of analysis.fanInTop) {
-      lines.push(formatDependencyFanStatText(stat));
-    }
-  }
-
-  if (analysis.fanOutTop.length > 0) {
-    lines.push('');
-    lines.push('[dependencies] fan-out top');
-
-    for (const stat of analysis.fanOutTop) {
-      lines.push(formatDependencyFanStatText(stat));
-    }
-  }
-
-  if (analysis.edgeCutHints.length > 0) {
-    lines.push('');
-    lines.push('[dependencies] edge cut hints');
-
-    for (const hint of analysis.edgeCutHints) {
-      lines.push(formatDependencyEdgeCutHintText(hint));
-    }
-  }
-
-  return lines.join('\n');
-};
-
-const formatCouplingHotspotText = (hotspot: CouplingHotspot): string => {
-  const signals = hotspot.signals.join(',');
-
-  return `  - ${hotspot.module}: score=${hotspot.score} signals=${signals}`;
-};
-
-const formatCouplingText = (hotspots: ReadonlyArray<CouplingHotspot>): string => {
-  const lines: string[] = [];
-
-  lines.push(`[coupling] hotspots=${hotspots.length}`);
-
-  if (hotspots.length === 0) {
-    return lines.join('\n');
-  }
-
-  for (const hotspot of hotspots) {
-    lines.push(formatCouplingHotspotText(hotspot));
-  }
-
-  return lines.join('\n');
-};
-
-const formatNestingItemText = (item: NestingItem): string => {
-  const rel = path.relative(process.cwd(), item.filePath);
-  const start = toPos(item.span.start.line, item.span.start.column);
-  const suggestions = item.suggestions.join('; ');
-
-  if (suggestions.length > 0) {
-    return `  - ${item.header} @ ${rel}:${start} depth=${item.metrics.depth} decisionPoints=${item.metrics.decisionPoints} score=${item.score} suggestions=${suggestions}`;
-  }
-
-  return `  - ${item.header} @ ${rel}:${start} depth=${item.metrics.depth} decisionPoints=${item.metrics.decisionPoints} score=${item.score}`;
-};
-
-const formatEarlyReturnItemText = (item: EarlyReturnItem): string => {
-  const rel = path.relative(process.cwd(), item.filePath);
-  const start = toPos(item.span.start.line, item.span.start.column);
-  const suggestions = item.suggestions.join('; ');
-  const guard = item.metrics.hasGuardClauses ? 'true' : 'false';
-
-  if (suggestions.length > 0) {
-    return `  - ${item.header} @ ${rel}:${start} earlyReturns=${item.metrics.earlyReturnCount} guardClauses=${guard} score=${item.score} suggestions=${suggestions}`;
-  }
-
-  return `  - ${item.header} @ ${rel}:${start} earlyReturns=${item.metrics.earlyReturnCount} guardClauses=${guard} score=${item.score}`;
-};
-
-const formatNoopFindingText = (finding: NoopFinding): string => {
-  const rel = path.relative(process.cwd(), finding.filePath);
-  const start = toPos(finding.span.start.line, finding.span.start.column);
-
-  return `  - ${finding.kind} @ ${rel}:${start} confidence=${finding.confidence} evidence=${finding.evidence}`;
-};
-
-const formatForwardingFindingText = (finding: ForwardingFinding): string => {
-  const rel = path.relative(process.cwd(), finding.filePath);
-  const start = toPos(finding.span.start.line, finding.span.start.column);
-
-  return `  - ${finding.kind}: ${finding.header} @ ${rel}:${start} depth=${finding.depth} evidence=${finding.evidence}`;
-};
-
-const formatApiDriftGroupText = (group: ApiDriftGroup): string => {
-  const shape = group.standardCandidate;
-  const outliers = group.outliers.map(outlier => outlier.shape);
-  const outlierSummary = outliers
-    .map(outlier => `(${outlier.paramsCount},${outlier.optionalCount},${outlier.returnKind},${outlier.async ? 'async' : 'sync'})`)
-    .join(' ');
-
-  return `  - ${group.label}: standard=(${shape.paramsCount},${shape.optionalCount},${shape.returnKind},${shape.async ? 'async' : 'sync'}) outliers=${group.outliers.length}${outlierSummary.length > 0 ? ` ${outlierSummary}` : ''}`;
-};
-
-const formatTypecheckItemText = (item: TypecheckItem): string => {
-  const rel = item.filePath.length > 0 ? path.relative(process.cwd(), item.filePath) : '<unknown>';
-  const start = toPos(item.span.start.line, item.span.start.column);
-
-  return `  - ${item.severity} ${item.code}: ${item.message} @ ${rel}:${start}`;
-};
-
-const formatLintText = (analysis: LintAnalysis): string => {
-  const total = analysis.diagnostics.length;
-  const errors = analysis.diagnostics.filter(d => d.severity === 'error').length;
-
-  return `[lint] tool=${analysis.tool} status=${analysis.status} diagnostics=${total} errors=${errors}`;
-};
-
-const formatFormatText = (analysis: FormatAnalysis): string => {
-  const exitCode = typeof analysis.exitCode === 'number' ? analysis.exitCode : 0;
-  return `[format] tool=${analysis.tool} status=${analysis.status} exitCode=${exitCode}`;
-};
-
-const formatUnknownProofFindingText = (finding: UnknownProofFinding): string => {
-  const rel = path.relative(process.cwd(), finding.filePath);
-  const start = toPos(finding.span.start.line, finding.span.start.column);
-  const symbol = typeof finding.symbol === 'string' && finding.symbol.length > 0 ? ` symbol=${finding.symbol}` : '';
-  const typeText = typeof finding.typeText === 'string' && finding.typeText.length > 0 ? ` type=${finding.typeText}` : '';
-  const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? ` evidence=${finding.evidence}` : '';
-
-  return `  - ${finding.kind}: ${finding.message} @ ${rel}:${start}${symbol}${typeText}${evidence}`;
+// ── Section builder ─────────────────────────────────────────────────
+const sectionHeader = (emoji: string, title: string, subtitle?: string): string => {
+  const sub = subtitle ? cc(` ${subtitle}`, A.dim) : '';
+  return `\n${cc(THIN, A.dim)}\n  ${emoji}  ${cc(title, `${A.bold}${A.white}`)}${sub}\n`;
 };
 
 const formatText = (report: FirebatReport): string => {
+  _color = isStdoutTty();
+
   const lines: string[] = [];
-  const detectors = report.meta.detectors.join(',');
-  const duplicates = report.analyses['exact-duplicates'];
-  const waste = report.analyses.waste;
-  const barrelPolicyFindings = report.analyses.barrelPolicy.findings.length;
-  const unknownProof = report.analyses.unknownProof;
-  const lint = report.analyses.lint;
-  const format = report.analyses.format;
   const selectedDetectors = new Set(report.meta.detectors);
-  const typecheckItems = report.analyses.typecheck.items;
-  const typecheckErrors = typecheckItems.filter(item => item.severity === 'error').length;
-  const typecheckWarnings = typecheckItems.filter(item => item.severity === 'warning').length;
+
+  const duplicates = report.analyses['exact-duplicates'] ?? [];
+  const waste = report.analyses['waste'] ?? [];
+  const barrelPolicy = report.analyses['barrel-policy'] ?? { findings: [] };
+  const unknownProof = report.analyses['unknown-proof'] ?? { status: 'ok' as const, tool: 'tsgo' as const, findings: [] };
+  const lint = report.analyses['lint'] ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
+  const format = report.analyses['format'] ?? { status: 'ok' as const, tool: 'oxfmt' as const };
+  const typecheck = report.analyses['typecheck'] ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
+  const deps = report.analyses['dependencies'] ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
+  const coupling = report.analyses['coupling'] ?? { hotspots: [] };
+  const structDups = report.analyses['structural-duplicates'] ?? { cloneClasses: [] };
+  const nesting = report.analyses['nesting'] ?? { items: [] };
+  const earlyReturn = report.analyses['early-return'] ?? { items: [] };
+  const noop = report.analyses['noop'] ?? { findings: [] };
+  const apiDrift = report.analyses['api-drift'] ?? { groups: [] };
+  const forwarding = report.analyses['forwarding'] ?? { findings: [] };
+
   const lintErrors = lint.diagnostics.filter(d => d.severity === 'error').length;
-  const unknownProofFindings = unknownProof.findings.length;
+  const typecheckErrors = typecheck.items.filter(i => i.severity === 'error').length;
+  const formatFindings = format.status === 'needs-formatting' || format.status === 'failed' ? 1 : 0;
 
-  lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} barrelPolicyFindings=${barrelPolicyFindings} formatStatus=${format.status} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
-  );
+  // ── Header ──────────────────────────────────────────────────────
+  lines.push('');
+  lines.push(`  ${cc('🔥 firebat', `${A.bold}${A.cyan}`)}  ${cc(`v${report.meta.version}`, A.dim)}`);
+  lines.push(`  ${cc(`${report.meta.targetCount} files · minSize ${report.meta.minSize} · engine ${report.meta.engine}`, A.dim)}`);
+  lines.push(cc(LINE, A.dim));
 
-  if (selectedDetectors.has('unknown-proof')) {
-    const defaultBoundaryGlobs = 'global';
-    lines.push(`[unknown-proof] status=${unknownProof.status} tool=${unknownProof.tool} findings=${unknownProof.findings.length}`);
-    lines.push(
-      `[unknown-proof] rules=no-type-assertion; no-explicit-unknown-outside-boundary; boundary-unknown-must-narrow-before-propagation; no-inferred-unknown/any-outside-boundary(tsgo)`
-    );
-    lines.push(
-      `[unknown-proof] boundaryGlobs=config.features["unknown-proof"].boundaryGlobs (default=${defaultBoundaryGlobs})`
-    );
+  // ── Summary Dashboard ───────────────────────────────────────────
+  const summaryRows: SummaryRow[] = [];
 
-    if (typeof unknownProof.error === 'string' && unknownProof.error.length > 0) {
-      lines.push(`[unknown-proof] error=${unknownProof.error}`);
-    }
-  }
+  if (selectedDetectors.has('exact-duplicates'))
+    summaryRows.push({ emoji: '🔁', label: 'Exact Duplicates', count: duplicates.length });
+  if (selectedDetectors.has('waste'))
+    summaryRows.push({ emoji: '🗑️', label: 'Waste', count: waste.length });
+  if (selectedDetectors.has('barrel-policy'))
+    summaryRows.push({ emoji: '📦', label: 'Barrel Policy', count: barrelPolicy.findings.length });
+  if (selectedDetectors.has('unknown-proof'))
+    summaryRows.push({ emoji: '🛡️', label: 'Unknown-proof', count: unknownProof.findings.length });
+  if (selectedDetectors.has('format'))
+    summaryRows.push({ emoji: '🎨', label: 'Format', count: formatFindings });
+  if (selectedDetectors.has('lint'))
+    summaryRows.push({ emoji: '🔍', label: 'Lint', count: lintErrors });
+  if (selectedDetectors.has('typecheck'))
+    summaryRows.push({ emoji: '🏷️', label: 'Typecheck', count: typecheckErrors });
+  if (selectedDetectors.has('forwarding'))
+    summaryRows.push({ emoji: '↗️', label: 'Forwarding', count: forwarding.findings.length });
+  if (selectedDetectors.has('structural-duplicates'))
+    summaryRows.push({ emoji: '🧬', label: 'Structural Dupes', count: structDups.cloneClasses.length });
+  if (selectedDetectors.has('nesting'))
+    summaryRows.push({ emoji: '🪹', label: 'Nesting', count: nesting.items.length });
+  if (selectedDetectors.has('early-return'))
+    summaryRows.push({ emoji: '↩️', label: 'Early Return', count: earlyReturn.items.length });
+  if (selectedDetectors.has('noop'))
+    summaryRows.push({ emoji: '💤', label: 'Noop', count: noop.findings.length });
+  if (selectedDetectors.has('dependencies'))
+    summaryRows.push({ emoji: '🔗', label: 'Dep Cycles', count: deps.cycles.length });
+  if (selectedDetectors.has('coupling'))
+    summaryRows.push({ emoji: '🔥', label: 'Coupling Hotspots', count: coupling.hotspots.length });
+  if (selectedDetectors.has('api-drift'))
+    summaryRows.push({ emoji: '📐', label: 'API Drift', count: apiDrift.groups.length });
 
-  if (selectedDetectors.has('lint')) {
-    lines.push(formatLintText(report.analyses.lint));
-  }
+  lines.push(...formatSummaryTable(summaryRows));
+  lines.push(cc(LINE, A.dim));
 
-  if (selectedDetectors.has('format')) {
-    lines.push(formatFormatText(report.analyses.format));
-  }
+  // ── Detail Sections (only shown when findings > 0) ──────────────
 
-  if (selectedDetectors.has('barrel-policy')) {
-    lines.push(`[barrel-policy] findings=${report.analyses.barrelPolicy.findings.length}`);
-  }
-
-  if (selectedDetectors.has('typecheck')) {
-    lines.push(`[typecheck] items=${typecheckItems.length} status=${report.analyses.typecheck.status} tool=${report.analyses.typecheck.tool}`);
-  }
-
-  if (selectedDetectors.has('dependencies')) {
-    lines.push(
-      `[dependencies] cycles=${report.analyses.dependencies.cycles.length} fanInTop=${report.analyses.dependencies.fanInTop.length} fanOutTop=${report.analyses.dependencies.fanOutTop.length} edgeCutHints=${report.analyses.dependencies.edgeCutHints.length}`,
-    );
-  }
-
-  if (selectedDetectors.has('coupling')) {
-    lines.push(`[coupling] hotspots=${report.analyses.coupling.hotspots.length}`);
-  }
-
-  if (selectedDetectors.has('structural-duplicates')) {
-    lines.push(`[structural-duplicates] cloneClasses=${report.analyses['structural-duplicates'].cloneClasses.length}`);
-  }
-
-  if (selectedDetectors.has('nesting')) {
-    lines.push(`[nesting] items=${report.analyses.nesting.items.length}`);
-  }
-
-  if (selectedDetectors.has('early-return')) {
-    lines.push(`[early-return] items=${report.analyses.earlyReturn.items.length}`);
-  }
-
-  if (selectedDetectors.has('noop')) {
-    lines.push(`[noop] findings=${report.analyses.noop.findings.length}`);
-  }
-
-  if (selectedDetectors.has('forwarding')) {
-    lines.push(`[forwarding] findings=${report.analyses.forwarding.findings.length} maxDepth=${report.meta.maxForwardDepth}`);
-  }
-
-  if (selectedDetectors.has('api-drift')) {
-    lines.push(`[api-drift] groups=${report.analyses.apiDrift.groups.length}`);
-  }
-
-  for (const group of duplicates) {
-    lines.push('');
-    lines.push(formatDuplicateGroupText(group));
-  }
-
-  for (const finding of waste) {
-    lines.push('');
-    lines.push(formatWasteText(finding));
-  }
-
-  if (selectedDetectors.has('barrel-policy')) {
-    const findings = report.analyses.barrelPolicy.findings;
-
-    lines.push('');
-    lines.push(`[barrel-policy] findings=${findings.length}`);
-
-    for (const finding of findings) {
-      lines.push(formatBarrelPolicyFindingText(finding));
-    }
-  }
-
-  if (selectedDetectors.has('unknown-proof')) {
-    const findings = report.analyses.unknownProof.findings;
-    const byKind = new Map<string, number>();
-
-    for (const f of findings) {
-      byKind.set(f.kind, (byKind.get(f.kind) ?? 0) + 1);
-    }
-
-    const kindSummary = [...byKind.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([k, v]) => `${k}=${v}`)
-      .join(' ');
-
-    lines.push('');
-    lines.push(
-      `[unknown-proof] findings=${findings.length} status=${report.analyses.unknownProof.status}${kindSummary.length > 0 ? ` kinds=${kindSummary}` : ''}`,
-    );
-
-    for (const finding of findings) {
-      lines.push(formatUnknownProofFindingText(finding));
-    }
-  }
-
-  if (selectedDetectors.has('typecheck')) {
-    lines.push('');
-    lines.push(`[typecheck] items=${typecheckItems.length}`);
-
-    for (const item of typecheckItems) {
-      lines.push(formatTypecheckItemText(item));
-
-      if (item.codeFrame.length > 0) {
-        lines.push(item.codeFrame.split('\n').map(line => `      ${line}`).join('\n'));
+  if (selectedDetectors.has('exact-duplicates') && duplicates.length > 0) {
+    lines.push(sectionHeader('🔁', 'Exact Duplicates', `${duplicates.length} groups`));
+    for (const group of duplicates) {
+      lines.push(`    ${cc(`${group.items.length} items`, A.yellow)}`);
+      for (const item of group.items) {
+        const rel = path.relative(process.cwd(), item.filePath);
+        const start = toPos(item.span.start.line, item.span.start.column);
+        const kindPrefix = item.kind !== 'node' ? `${item.kind}: ` : '';
+        const name = item.header !== 'anonymous' ? `${kindPrefix}${item.header} ` : '';
+        lines.push(`      ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
       }
     }
   }
 
-  if (selectedDetectors.has('dependencies')) {
-    lines.push('');
-    lines.push(formatDependenciesText(report.analyses.dependencies));
-  }
-
-  if (selectedDetectors.has('coupling')) {
-    lines.push('');
-    lines.push(formatCouplingText(report.analyses.coupling.hotspots));
-  }
-
-  if (selectedDetectors.has('structural-duplicates')) {
-    const cloneClasses = report.analyses['structural-duplicates'].cloneClasses;
-
-    lines.push('');
-    lines.push(`[structural-duplicates] cloneClasses=${cloneClasses.length}`);
-
-    for (const group of cloneClasses) {
-      lines.push('');
-      lines.push(formatDuplicateGroupTextWithLabel('structural-duplicates', group));
+  if (selectedDetectors.has('waste') && waste.length > 0) {
+    lines.push(sectionHeader('🗑️', 'Waste', `${waste.length} findings`));
+    for (const finding of waste) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${finding.label} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 
-  if (selectedDetectors.has('nesting')) {
-    const items = report.analyses.nesting.items;
-
-    lines.push('');
-    lines.push(`[nesting] items=${items.length}`);
-
-    for (const item of items) {
-      lines.push(formatNestingItemText(item));
+  if (selectedDetectors.has('barrel-policy') && barrelPolicy.findings.length > 0) {
+    lines.push(sectionHeader('📦', 'Barrel Policy', `${barrelPolicy.findings.length} findings`));
+    for (const finding of barrelPolicy.findings) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? cc(` (${finding.evidence})`, A.dim) : '';
+      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${finding.message} ${cc(`@ ${rel}:${start}`, A.dim)}${evidence}`);
     }
   }
 
-  if (selectedDetectors.has('early-return')) {
-    const items = report.analyses.earlyReturn.items;
-
-    lines.push('');
-    lines.push(`[early-return] items=${items.length}`);
-
-    for (const item of items) {
-      lines.push(formatEarlyReturnItemText(item));
+  if (selectedDetectors.has('unknown-proof') && unknownProof.findings.length > 0) {
+    lines.push(sectionHeader('🛡️', 'Unknown-proof', `${unknownProof.findings.length} findings`));
+    for (const finding of unknownProof.findings) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      const symbol = typeof finding.symbol === 'string' && finding.symbol.length > 0 ? ` ${finding.symbol}` : '';
+      lines.push(`    ${cc('·', A.dim)} ${finding.kind}:${symbol} ${finding.message} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 
-  if (selectedDetectors.has('noop')) {
-    const findings = report.analyses.noop.findings;
-
-    lines.push('');
-    lines.push(`[noop] findings=${findings.length}`);
-
-    for (const finding of findings) {
-      lines.push(formatNoopFindingText(finding));
+  if (selectedDetectors.has('format') && (format.status === 'needs-formatting' || format.status === 'failed')) {
+    lines.push(sectionHeader('🎨', 'Format', `${format.status}`));
+    if (typeof format.fileCount === 'number' && format.fileCount > 0) {
+      lines.push(`    ${format.fileCount} file${format.fileCount === 1 ? '' : 's'} need formatting`);
     }
   }
 
-  if (selectedDetectors.has('api-drift')) {
-    const groups = report.analyses.apiDrift.groups;
-
-    lines.push('');
-    lines.push(`[api-drift] groups=${groups.length}`);
-
-    for (const group of groups) {
-      lines.push(formatApiDriftGroupText(group));
+  if (selectedDetectors.has('lint') && lint.diagnostics.length > 0) {
+    lines.push(sectionHeader('🔍', 'Lint', `${lint.diagnostics.length} diagnostics`));
+    for (const d of lint.diagnostics) {
+      const sev = d.severity === 'error' ? cc('error', A.red) : cc('warn', A.yellow);
+      const rel = d.filePath ? path.relative(process.cwd(), d.filePath) : '';
+      const start = toPos(d.span.start.line, d.span.start.column);
+      lines.push(`    ${sev} ${d.code ?? ''}: ${d.message} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 
-  if (selectedDetectors.has('forwarding')) {
-    const findings = report.analyses.forwarding.findings;
-
-    lines.push('');
-    lines.push(`[forwarding] findings=${findings.length}`);
-
-    for (const finding of findings) {
-      lines.push(formatForwardingFindingText(finding));
+  if (selectedDetectors.has('typecheck') && typecheck.items.length > 0) {
+    lines.push(sectionHeader('🏷️', 'Typecheck', `${typecheck.items.length} items`));
+    for (const item of typecheck.items) {
+      const rel = item.filePath.length > 0 ? path.relative(process.cwd(), item.filePath) : '<unknown>';
+      const start = toPos(item.span.start.line, item.span.start.column);
+      const sev = item.severity === 'error' ? cc('error', A.red) : cc('warn', A.yellow);
+      lines.push(`    ${sev} ${item.code}: ${item.message} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+      if (item.codeFrame.length > 0) {
+        for (const frameLine of item.codeFrame.split('\n')) {
+          lines.push(`        ${cc(frameLine, A.dim)}`);
+        }
+      }
     }
   }
 
+  if (selectedDetectors.has('forwarding') && forwarding.findings.length > 0) {
+    lines.push(sectionHeader('↗️', 'Forwarding', `${forwarding.findings.length} findings`));
+    for (const finding of forwarding.findings) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      const name = finding.header !== 'anonymous' ? `${finding.header} ` : '';
+      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('structural-duplicates') && structDups.cloneClasses.length > 0) {
+    lines.push(sectionHeader('🧬', 'Structural Duplicates', `${structDups.cloneClasses.length} classes`));
+    for (const group of structDups.cloneClasses) {
+      lines.push(`    ${cc(`${group.items.length} items`, A.yellow)}`);
+      for (const item of group.items) {
+        const rel = path.relative(process.cwd(), item.filePath);
+        const start = toPos(item.span.start.line, item.span.start.column);
+        const kindPrefix = item.kind !== 'node' ? `${item.kind}: ` : '';
+        const name = item.header !== 'anonymous' ? `${kindPrefix}${item.header} ` : '';
+        lines.push(`      ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
+      }
+    }
+  }
+
+  if (selectedDetectors.has('nesting') && nesting.items.length > 0) {
+    lines.push(sectionHeader('🪹', 'Nesting', `${nesting.items.length} items`));
+    for (const item of nesting.items) {
+      const rel = path.relative(process.cwd(), item.filePath);
+      const start = toPos(item.span.start.line, item.span.start.column);
+      const name = item.header !== 'anonymous' ? `${item.header} ` : '';
+      const suggestions = item.suggestions.length > 0 ? cc(` → ${item.suggestions.join('; ')}`, A.dim) : '';
+      lines.push(`    ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}${suggestions}`);
+    }
+  }
+
+  if (selectedDetectors.has('early-return') && earlyReturn.items.length > 0) {
+    lines.push(sectionHeader('↩️', 'Early Return', `${earlyReturn.items.length} items`));
+    for (const item of earlyReturn.items) {
+      const rel = path.relative(process.cwd(), item.filePath);
+      const start = toPos(item.span.start.line, item.span.start.column);
+      const name = item.header !== 'anonymous' ? `${item.header} ` : '';
+      const suggestions = item.suggestions.length > 0 ? cc(` → ${item.suggestions.join('; ')}`, A.dim) : '';
+      lines.push(`    ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}${suggestions}`);
+    }
+  }
+
+  if (selectedDetectors.has('noop') && noop.findings.length > 0) {
+    lines.push(sectionHeader('💤', 'Noop', `${noop.findings.length} findings`));
+    for (const finding of noop.findings) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${cc(`@ ${rel}:${start}`, A.dim)} ${cc(finding.evidence, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('dependencies') && (deps.cycles.length > 0 || deps.edgeCutHints.length > 0)) {
+    lines.push(sectionHeader('🔗', 'Dependencies', `${deps.cycles.length} cycles · ${deps.edgeCutHints.length} cut hints`));
+    if (deps.cycles.length > 0) {
+      lines.push(`    ${cc('cycles:', A.yellow)}`);
+      for (const cycle of deps.cycles) {
+        lines.push(`      ${cc('·', A.dim)} ${cycle.path.join(' → ')}`);
+      }
+    }
+    if (deps.edgeCutHints.length > 0) {
+      lines.push(`    ${cc('edge cut hints:', A.yellow)}`);
+      for (const hint of deps.edgeCutHints) {
+        const reason = typeof hint.reason === 'string' && hint.reason.length > 0 ? cc(` (${hint.reason})`, A.dim) : '';
+        lines.push(`      ${cc('·', A.dim)} ${hint.from} → ${hint.to}${reason}`);
+      }
+    }
+  }
+
+  if (selectedDetectors.has('coupling') && coupling.hotspots.length > 0) {
+    lines.push(sectionHeader('🔥', 'Coupling Hotspots', `${coupling.hotspots.length} modules`));
+    for (const hotspot of coupling.hotspots) {
+      const signals = hotspot.signals.join(', ');
+      lines.push(`    ${cc('·', A.dim)} ${hotspot.module} ${cc(`score=${hotspot.score}`, A.yellow)} ${cc(signals, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('api-drift') && apiDrift.groups.length > 0) {
+    lines.push(sectionHeader('📐', 'API Drift', `${apiDrift.groups.length} groups`));
+    for (const group of apiDrift.groups) {
+      const shape = group.standardCandidate;
+      const standard = `(${shape.paramsCount},${shape.optionalCount},${shape.returnKind},${shape.async ? 'async' : 'sync'})`;
+      lines.push(`    ${cc('·', A.dim)} ${group.label}: standard=${standard} outliers=${group.outliers.length}`);
+    }
+  }
+
+  lines.push('');
   return lines.join('\n');
 };
 

@@ -51,24 +51,6 @@
     "unknown-proof": true
   },
 
-  // Internal firebat logging (stderr threshold + optional file sink).
-  "logging": {
-    // Minimum severity emitted to stderr: silent|error|warn|info.
-    "level": "error",
-
-    // Optional log file path (absolute or relative to project root).
-    "filePath": "./.firebat/firebat.log"
-  },
-
-  // CLI output defaults.
-  "output": {
-    // Output format: text|json.
-    "format": "text",
-
-    // When true, CLI exits non-zero if blocking findings exist.
-    "exitOnFindings": true
-  },
-
   // MCP overrides (use "inherit" to reuse root config).
   "mcp": "inherit"
 }

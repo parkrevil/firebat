@@ -1,6 +1,10 @@
-import type { FunctionNodeAnalyzer, ParsedFile } from './types';
+import type { Node } from 'oxc-parser';
 
-import { collectFunctionNodes } from './oxc-ast-utils';
+import type { ParsedFile } from './types';
+
+import { collectFunctionNodesWithParent } from './oxc-ast-utils';
+
+export type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
 
 const collectFunctionItems = <TItem>(
   files: ReadonlyArray<ParsedFile>,
@@ -13,10 +17,10 @@ const collectFunctionItems = <TItem>(
       continue;
     }
 
-    const functions = collectFunctionNodes(file.program);
+    const functions = collectFunctionNodesWithParent(file.program);
 
-    for (const functionNode of functions) {
-      const item = analyzeFunctionNode(functionNode, file.filePath, file.sourceText);
+    for (const { node, parent } of functions) {
+      const item = analyzeFunctionNode(node, file.filePath, file.sourceText, parent);
 
       if (item === null || item === undefined) {
         continue;

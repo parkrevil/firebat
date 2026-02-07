@@ -1,4 +1,6 @@
 import type { LintAnalysis } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../ports/logger';
 
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
 
@@ -8,8 +10,9 @@ export const createEmptyLint = (): LintAnalysis => ({
   diagnostics: [],
 });
 
-export const analyzeLint = async (input: { readonly targets: ReadonlyArray<string>; readonly fix: boolean }): Promise<LintAnalysis> => {
-  const result = await runOxlint({ targets: input.targets, ...(input.fix ? { fix: true } : {}) });
+export const analyzeLint = async (input: { readonly targets: ReadonlyArray<string>; readonly fix: boolean; readonly logger?: FirebatLogger }): Promise<LintAnalysis> => {
+  const logger = input.logger ?? createNoopLogger();
+  const result = await runOxlint({ targets: input.targets, ...(input.fix ? { fix: true } : {}), logger });
 
   if (!result.ok) {
     const error = result.error ?? 'oxlint failed';

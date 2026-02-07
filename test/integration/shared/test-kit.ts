@@ -76,12 +76,12 @@ export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): st
 
   for (const group of groups) {
     const itemKeys = [...group.items].map(item => {
-      return `${item.filePath}|${item.kind}|${item.header}|${item.size}`;
+      return `${item.filePath}|${item.kind}|${item.header}|${item.span.start.line}:${item.span.start.column}`;
     });
 
     itemKeys.sort((left, right) => left.localeCompare(right));
 
-    signatures.push(`${group.fingerprint}::${itemKeys.join(';')}`);
+    signatures.push(itemKeys.join(';'));
   }
 
   signatures.sort((left, right) => left.localeCompare(right));

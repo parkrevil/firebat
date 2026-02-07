@@ -6,6 +6,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { expect, test } from 'bun:test';
 
 import { runInstall, runUpdate } from '../../../src/adapters/cli/install';
+import { createPrettyConsoleLogger } from '../../../src/infrastructure/logging/pretty-console-logger';
+
+const testLogger = createPrettyConsoleLogger({ level: 'error', includeStack: false });
 
 const sha256Hex = (text: string): string => {
   return createHash('sha256').update(text).digest('hex');
@@ -156,7 +159,7 @@ test('should abort update when no install manifest exists', async () => {
 
     // Act
     const { result, errors } = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -177,7 +180,7 @@ test('should apply template changes when user matches base', async () => {
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -211,7 +214,7 @@ test('should apply template changes when user matches base', async () => {
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -233,7 +236,7 @@ test('should not overwrite user-edited existing keys', async () => {
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -278,7 +281,7 @@ test('should not overwrite user-edited existing keys', async () => {
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -308,7 +311,7 @@ test('should delete keys missing from template even if user added them', async (
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -327,7 +330,7 @@ test('should delete keys missing from template even if user added them', async (
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -355,7 +358,7 @@ test('should not rewrite .oxfmtrc.jsonc when keyset is unchanged (comments prese
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -372,7 +375,7 @@ test('should not rewrite .oxfmtrc.jsonc when keyset is unchanged (comments prese
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -396,7 +399,7 @@ test('should delete keys missing from template in .oxlintrc.jsonc', async () => 
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -410,7 +413,7 @@ test('should delete keys missing from template in .oxlintrc.jsonc', async () => 
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert
@@ -435,7 +438,7 @@ test('should abort update when config parsing fails', async () => {
     process.chdir(tmpRootAbs);
 
     const installResult = await withCapturedConsole(async () => {
-      return await runInstall([]);
+      return await runInstall([], testLogger);
     });
 
     expect(installResult.result).toBe(0);
@@ -445,7 +448,7 @@ test('should abort update when config parsing fails', async () => {
 
     // Act
     const updateResult = await withCapturedConsole(async () => {
-      return await runUpdate([]);
+      return await runUpdate([], testLogger);
     });
 
     // Assert

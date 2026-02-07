@@ -1,5 +1,6 @@
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, UnknownProofAnalysis, UnknownProofFinding } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
 
 
 import { collectUnknownProofCandidates } from './candidates';
@@ -17,6 +18,7 @@ export const analyzeUnknownProof = async (
 		rootAbs?: string;
 		boundaryGlobs?: ReadonlyArray<string>;
 		tsconfigPath?: string;
+		logger?: FirebatLogger;
 	},
 ): Promise<UnknownProofAnalysis> => {
 	const rootAbs = input?.rootAbs ?? process.cwd();
@@ -61,6 +63,7 @@ export const analyzeUnknownProof = async (
 		candidatesByFile: tsgoCandidatesByFile,
 		boundaryUsageCandidatesByFile,
 		...(input?.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
+		...(input?.logger !== undefined ? { logger: input.logger } : {}),
 	});
 
 	if (!tsgoResult.ok) {

@@ -10,6 +10,7 @@ export interface FirebatCliExplicitFlags {
   readonly fix: boolean;
   readonly configPath: boolean;
   readonly logLevel: boolean;
+  readonly logStack: boolean;
 }
 
 export interface FirebatCliOptions {
@@ -25,9 +26,11 @@ export interface FirebatCliOptions {
   readonly help: boolean;
   readonly configPath?: string;
   readonly logLevel?: FirebatLogLevel;
+  readonly logStack?: boolean;
   readonly explicit?: FirebatCliExplicitFlags;
 }
 
 export interface FirebatProgramConfig {
   readonly targets: readonly string[];
+  readonly logger: import('./ports/logger').FirebatLogger;
 }

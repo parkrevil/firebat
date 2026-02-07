@@ -48,7 +48,7 @@ const isSingleReturnBlock = (value: NodeValue): boolean => {
   return isReturnStatement(onlyNode as NodeValue);
 };
 
-const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: string): EarlyReturnItem | null => {
+const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: string, parent: Node | null): EarlyReturnItem | null => {
   const bodyValue = resolveFunctionBody(functionNode);
 
   if (bodyValue === null || bodyValue === undefined) {
@@ -110,7 +110,7 @@ const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: s
 
   visit(bodyValue as NodeValue, 0);
 
-  const header = getNodeHeader(functionNode);
+  const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
   const score = Math.max(0, earlyReturnCount + (hasGuardClauses ? 0 : 1));
   const suggestions: string[] = [];
@@ -138,7 +138,7 @@ const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: s
 
 const analyzeEarlyReturn = (files: ReadonlyArray<ParsedFile>): EarlyReturnAnalysis => {
   return {
-    items: collectFunctionItems(files, analyzeFunctionNode),
+    items: collectFunctionItems(files, analyzeFunctionNode).filter(item => item.suggestions.length > 0),
   };
 };
 

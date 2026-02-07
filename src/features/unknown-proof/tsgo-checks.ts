@@ -1,5 +1,7 @@
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../ports/logger';
 
 import { withTsgoLspSession, openTsDocument } from '../../infrastructure/tsgo/tsgo-runner';
 
@@ -72,6 +74,7 @@ export const runTsgoUnknownProofChecks = async (input: {
 	candidatesByFile: ReadonlyMap<string, ReadonlyArray<BindingCandidate>>;
 	boundaryUsageCandidatesByFile?: ReadonlyMap<string, ReadonlyArray<BoundaryUsageCandidate>>;
 	tsconfigPath?: string;
+	logger?: FirebatLogger;
 }): Promise<{ ok: true; findings: ReadonlyArray<UnknownProofFinding> } | { ok: false; error: string; findings: ReadonlyArray<UnknownProofFinding> } > => {
 	const rootAbs = input.rootAbs;
 	const fileByPath = new Map<string, ParsedFile>();
@@ -81,7 +84,7 @@ export const runTsgoUnknownProofChecks = async (input: {
 	}
 
 	const result = await withTsgoLspSession<ReadonlyArray<UnknownProofFinding>>(
-		{ root: rootAbs, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
+		{ root: rootAbs, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}), logger: input.logger ?? createNoopLogger() },
 		async session => {
 			const findings: UnknownProofFinding[] = [];
 

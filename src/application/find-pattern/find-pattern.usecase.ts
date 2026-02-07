@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import { discoverDefaultTargets } from '../../target-discovery';
 import { findPatternInFiles, type AstGrepMatch } from '../../infrastructure/ast-grep/find-pattern';
+import type { FirebatLogger } from '../../ports/logger';
 
 interface JsonObject {
   readonly [k: string]: JsonValue;
@@ -20,6 +21,7 @@ interface FindPatternInput {
   readonly rule?: JsonValue;
   readonly matcher?: JsonValue;
   readonly ruleName?: string;
+  readonly logger: FirebatLogger;
 }
 
 const uniqueSorted = (values: ReadonlyArray<string>): string[] =>
@@ -46,10 +48,14 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
 };
 
 const findPatternUseCase = async (input: FindPatternInput): Promise<ReadonlyArray<AstGrepMatch>> => {
+  const { logger } = input;
   const cwd = process.cwd();
   const targetsRaw = input.targets !== undefined && input.targets.length > 0 ? input.targets : await discoverDefaultTargets(cwd);
   const targets = await expandTargets(cwd, targetsRaw);
-  const request: Parameters<typeof findPatternInFiles>[0] = { targets };
+
+  logger.debug('find-pattern: searching', { ruleName: input.ruleName, targetCount: targets.length });
+
+  const request: Parameters<typeof findPatternInFiles>[0] = { targets, logger };
 
   if (input.rule !== undefined) {
     request.rule = input.rule;

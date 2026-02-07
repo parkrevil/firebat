@@ -26,11 +26,11 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
 ];
 
 const parseLogLevel = (value: string): FirebatLogLevel => {
-  if (value === 'silent' || value === 'error' || value === 'warn' || value === 'info') {
+  if (value === 'error' || value === 'warn' || value === 'info' || value === 'debug' || value === 'trace') {
     return value;
   }
 
-  throw new Error(`[firebat] Invalid --log-level: ${value}. Expected silent|error|warn|info`);
+  throw new Error(`[firebat] Invalid --log-level: ${value}. Expected error|warn|info|debug|trace`);
 };
 
 const parseNumber = (value: string, label: string): number => {
@@ -130,6 +130,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let fix = false;
   let configPath: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
+  let logStack: boolean | undefined;
 
   type ExplicitMutable = {
     format: boolean;
@@ -140,6 +141,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     fix: boolean;
     configPath: boolean;
     logLevel: boolean;
+    logStack: boolean;
   };
 
   const toExplicitFlags = (input: ExplicitMutable): FirebatCliExplicitFlags => {
@@ -152,6 +154,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       fix: input.fix,
       configPath: input.configPath,
       logLevel: input.logLevel,
+      logStack: input.logStack,
     };
   };
 
@@ -164,6 +167,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     fix: false,
     configPath: false,
     logLevel: false,
+    logStack: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -289,6 +293,12 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
+    if (arg === '--log-stack') {
+      logStack = true;
+      explicit.logStack = true;
+      continue;
+    }
+
     if (arg.startsWith('-')) {
       throw new Error(`[firebat] Unknown option: ${arg}`);
     }
@@ -307,6 +317,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     help: false,
     ...(configPath !== undefined ? { configPath } : {}),
     ...(logLevel !== undefined ? { logLevel } : {}),
+    ...(logStack !== undefined ? { logStack } : {}),
     explicit: toExplicitFlags(explicit),
   };
 };

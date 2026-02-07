@@ -33,17 +33,6 @@ export const artifacts = sqliteTable(
   ],
 );
 
-export const reports = sqliteTable(
-  'reports',
-  {
-    projectKey: text('projectKey').notNull(),
-    reportKey: text('reportKey').notNull(),
-    createdAt: integer('createdAt').notNull(),
-    reportJson: text('reportJson').notNull(),
-  },
-  table => [primaryKey({ columns: [table.projectKey, table.reportKey] })],
-);
-
 export const memories = sqliteTable(
   'memories',
   {

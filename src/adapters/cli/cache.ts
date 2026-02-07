@@ -2,19 +2,50 @@ import * as path from 'node:path';
 import { rm } from 'node:fs/promises';
 
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import type { FirebatLogger } from '../../ports/logger';
+
+const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+
+const H = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  gray: '\x1b[90m',
+  white: '\x1b[37m',
+} as const;
+
+const hc = (text: string, code: string, color: boolean): string => color ? `${code}${text}${H.reset}` : text;
+
+const writeStdout = (text: string): void => {
+  process.stdout.write(text + '\n');
+};
 
 const printCacheHelp = (): void => {
+  const c = isTty();
   const lines = [
-    'firebat cache',
     '',
-    'Usage:',
-    '  firebat cache clean',
+    `  ${hc('\ud83d\udd25 firebat cache', `${H.bold}${H.cyan}`, c)}`,
     '',
-    'Notes:',
-    '  - Keeps the .firebat/ directory but deletes the SQLite cache DB files.',
+    `  ${hc('USAGE', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('$', H.dim, c)} firebat cache clean`,
+    '',
+    `  ${hc('DESCRIPTION', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    Deletes the SQLite cache database files from ${hc('.firebat/', H.green, c)}.`,
+    `    The ${hc('.firebat/', H.green, c)} directory itself is preserved.`,
+    '',
+    `  ${hc('FILES REMOVED', `${H.bold}${H.yellow}`, c)}`,
+    '',
+    `    ${hc('\u2022', H.dim, c)} ${hc('.firebat/firebat.sqlite', H.gray, c)}`,
+    `    ${hc('\u2022', H.dim, c)} ${hc('.firebat/firebat.sqlite-wal', H.gray, c)}`,
+    `    ${hc('\u2022', H.dim, c)} ${hc('.firebat/firebat.sqlite-shm', H.gray, c)}`,
+    '',
   ];
-
-  console.log(lines.join('\n'));
+  writeStdout(lines.join('\n'));
 };
 
 const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' | 'failed'> => {
@@ -33,7 +64,7 @@ const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' |
   }
 };
 
-export const runCache = async (argv: readonly string[]): Promise<number> => {
+export const runCache = async (argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   const sub = argv[0] ?? '';
 
   if (sub === '--help' || sub === '-h' || sub.length === 0) {
@@ -48,10 +79,12 @@ export const runCache = async (argv: readonly string[]): Promise<number> => {
     return 1;
   }
 
+  logger.debug('cache clean: resolving root');
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = ctx.rootAbs;
   const base = path.join(rootAbs, '.firebat', 'firebat.sqlite');
   const candidates = [base, `${base}-wal`, `${base}-shm`];
+  logger.trace(`Cache files to check: ${candidates.join(', ')}`);
 
   const removed: string[] = [];
   const missing: string[] = [];
@@ -66,23 +99,23 @@ export const runCache = async (argv: readonly string[]): Promise<number> => {
   }
 
   if (failed.length > 0) {
-    console.error('[firebat] cache clean failed: could not remove some cache files (are they in use?)');
+    logger.error('cache clean failed: could not remove some cache files (are they in use?)');
 
     for (const item of failed) {
-      console.error(`[firebat]  - ${item}`);
+      logger.error(`  - ${item}`);
     }
 
     return 1;
   }
 
-  console.log('[firebat] cache clean done');
+  logger.info('cache clean done');
 
   for (const item of removed) {
-    console.log(`[firebat] removed ${item}`);
+    logger.info(`removed ${item}`);
   }
 
   if (removed.length === 0 && missing.length > 0) {
-    console.log('[firebat] cache already clean');
+    logger.info('cache already clean');
   }
 
   return 0;

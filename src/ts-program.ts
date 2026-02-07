@@ -44,6 +44,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
   }
 
   if (eligible.length === 0) {
+    config.logger.debug('No eligible files to parse');
     return [];
   }
 
@@ -75,6 +76,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
   const workerUrl = URL.createObjectURL(workerFile);
   const workerCount = Math.max(1, Math.min(hardware, eligible.length));
   const workers: Worker[] = [];
+  config.logger.debug(`Spawning ${workerCount} parse workers for ${eligible.length} eligible files`, { hardwareConcurrency: hardware });
 
   try {
     for (let i = 0; i < workerCount; i += 1) {
@@ -123,7 +125,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
             if (!data || typeof data !== 'object' || data.ok !== true) {
               const errText = typeof data?.error === 'string' ? data.error : 'unknown error';
-              console.error(`[firebat] Failed to parse ${item.filePath}: ${errText}`);
+              config.logger.warn(`Parse failed: ${item.filePath}: ${errText}`);
               continue;
             }
 
@@ -136,7 +138,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
             };
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            console.error(`[firebat] Failed to parse ${item.filePath}: ${message}`);
+            config.logger.warn(`Parse failed: ${item.filePath}: ${message}`);
           }
         }
       })(),
@@ -144,7 +146,9 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
     await Promise.all(runners);
 
-    return resultsByIndex.filter((v): v is ParsedFile => v !== undefined);
+    const results = resultsByIndex.filter((v): v is ParsedFile => v !== undefined);
+    config.logger.trace(`Parse complete: ${results.length}/${eligible.length} files succeeded`);
+    return results;
   } finally {
     for (const worker of workers) {
       try {

@@ -104,6 +104,51 @@ export const collectOxcNodes = (program: NodeValue, predicate: OxcNodePredicate)
 
 export const collectFunctionNodes = (program: NodeValue): Node[] => collectOxcNodes(program, isFunctionNode);
 
+export interface FunctionNodeWithParent {
+  readonly node: Node;
+  readonly parent: Node | null;
+}
+
+export const collectFunctionNodesWithParent = (program: NodeValue): FunctionNodeWithParent[] => {
+  const results: FunctionNodeWithParent[] = [];
+
+  const visit = (value: NodeValue, parent: Node | null): void => {
+    if (isOxcNodeArray(value)) {
+      for (const entry of value) {
+        visit(entry, parent);
+      }
+
+      return;
+    }
+
+    if (!isOxcNode(value)) {
+      return;
+    }
+
+    if (isFunctionNode(value)) {
+      results.push({ node: value, parent });
+    }
+
+    if (!isNodeRecord(value)) {
+      return;
+    }
+
+    const entries = Object.entries(value);
+
+    for (const [key, childValue] of entries) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      visit(childValue, value);
+    }
+  };
+
+  visit(program, null);
+
+  return results;
+};
+
 export const visitOxcChildren = (node: Node, visit: NodeValueVisitor): void => {
   if (!isNodeRecord(node)) {
     return;
@@ -120,7 +165,7 @@ export const visitOxcChildren = (node: Node, visit: NodeValueVisitor): void => {
   }
 };
 
-export const getNodeHeader = (node: Node): string => {
+export const getNodeHeader = (node: Node, parent?: Node | null): string => {
   const idNode = isNodeRecord(node) ? node.id : undefined;
   const idName = getNodeName(idNode);
 
@@ -141,6 +186,32 @@ export const getNodeHeader = (node: Node): string => {
 
     if (typeof keyValue === 'string' && keyValue.length > 0) {
       return keyValue;
+    }
+  }
+
+  if (parent !== undefined && parent !== null && isNodeRecord(parent)) {
+    const parentType = (parent as Node).type;
+
+    if (parentType === 'VariableDeclarator') {
+      const parentIdName = getNodeName(parent.id);
+
+      if (typeof parentIdName === 'string' && parentIdName.length > 0) {
+        return parentIdName;
+      }
+    }
+
+    if (parentType === 'MethodDefinition' || parentType === 'PropertyDefinition' || parentType === 'Property') {
+      const parentKeyName = getNodeName(parent.key);
+
+      if (typeof parentKeyName === 'string' && parentKeyName.length > 0) {
+        return parentKeyName;
+      }
+
+      const parentKeyValue = getLiteralString(parent.key);
+
+      if (typeof parentKeyValue === 'string' && parentKeyValue.length > 0) {
+        return parentKeyValue;
+      }
     }
   }
 

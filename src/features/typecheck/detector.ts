@@ -260,11 +260,14 @@ const analyzeTypecheck = async (program: ReadonlyArray<ParsedFile>): Promise<Typ
       exitCode: 0,
       items,
     };
-  } catch {
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+
     return {
       status: 'failed',
       tool: 'tsgo',
       exitCode: null,
+      error: errorMessage,
       items: [],
     };
   }

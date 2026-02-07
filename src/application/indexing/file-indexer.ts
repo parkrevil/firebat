@@ -1,16 +1,24 @@
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FirebatLogger } from '../../ports/logger';
 
 interface IndexTargetsInput {
   readonly projectKey: string;
   readonly targets: ReadonlyArray<string>;
   readonly repository: FileIndexRepository;
   readonly concurrency?: number;
+  readonly logger: FirebatLogger;
 }
 
 const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
   const concurrency = input.concurrency ?? 8;
+  const logger = input.logger;
+  let updated = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  logger.debug(`Indexing ${input.targets.length} files`, { concurrency });
 
   await runWithConcurrency(input.targets, concurrency, async filePath => {
     try {
@@ -23,6 +31,7 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
       const size = stats.size;
 
       if (existing && existing.mtimeMs === mtimeMs && existing.size === size) {
+        skipped += 1;
         return;
       }
 
@@ -36,10 +45,19 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
         size,
         contentHash,
       });
+      updated += 1;
+      logger.trace(`Index upsert: ${filePath}`, { size, mtimeMs });
     } catch {
+      failed += 1;
+      logger.warn(`Index failed, entry removed: ${filePath}`);
       await input.repository.deleteFile({ projectKey: input.projectKey, filePath });
     }
   });
+
+  logger.debug(`Indexing done`, { updated, skipped, failed });
+  if (skipped > 0) {
+    logger.trace(`Index skip: ${skipped} files unchanged`);
+  }
 };
 
 export { indexTargets };

@@ -74,7 +74,7 @@ describe('integration/nesting', () => {
     expect(nestingItem?.metrics.depth).toBeGreaterThanOrEqual(2);
   });
 
-  it('should report low depth when functions are straight-line', () => {
+  it('should exclude straight-line functions when no suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -86,8 +86,7 @@ describe('integration/nesting', () => {
     let nestingItem = nesting.items.find(entry => entry.header === 'simple');
 
     // Assert
-    expect(nestingItem).toBeDefined();
-    expect(nestingItem?.metrics.depth).toBe(0);
+    expect(nestingItem).toBeUndefined();
   });
 
   it('should return no findings when input is empty', () => {
@@ -101,7 +100,7 @@ describe('integration/nesting', () => {
     expect(nesting.items.length).toBe(0);
   });
 
-  it('should count switch statements when decision points exist', () => {
+  it('should exclude low-complexity switch functions when no suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -113,11 +112,10 @@ describe('integration/nesting', () => {
     let item = nesting.items.find(entry => entry.header === 'decision');
 
     // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.decisionPoints).toBeGreaterThanOrEqual(1);
+    expect(item).toBeUndefined();
   });
 
-  it('should ignore nested function depth when analyzing outer scope', () => {
+  it('should exclude outer functions when no suggestions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -129,7 +127,6 @@ describe('integration/nesting', () => {
     let item = nesting.items.find(entry => entry.header === 'outer');
 
     // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.depth).toBe(0);
+    expect(item).toBeUndefined();
   });
 });

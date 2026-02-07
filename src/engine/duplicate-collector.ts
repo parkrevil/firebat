@@ -1,10 +1,18 @@
-import type { DuplicateGroup, DuplicateItem } from '../types';
+import type { DuplicateGroup, DuplicateItem, SourceSpan } from '../types';
 
 import type { DuplicateFingerprintResolver, DuplicateItemKindResolver, OxcNodePredicate, ParsedFile } from './types';
 
 import { collectOxcNodes, getNodeHeader } from './oxc-ast-utils';
 import { countOxcSize } from './oxc-size-count';
 import { getLineColumn } from './source-position';
+
+interface CollectorItem {
+  readonly kind: DuplicateItem['kind'];
+  readonly header: string;
+  readonly filePath: string;
+  readonly span: SourceSpan;
+  readonly size: number;
+}
 
 const collectDuplicateGroups = (
   files: ReadonlyArray<ParsedFile>,
@@ -13,7 +21,7 @@ const collectDuplicateGroups = (
   resolveFingerprint: DuplicateFingerprintResolver,
   resolveKind: DuplicateItemKindResolver,
 ): DuplicateGroup[] => {
-  const groupsByHash = new Map<string, DuplicateItem[]>();
+  const groupsByHash = new Map<string, CollectorItem[]>();
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -53,14 +61,13 @@ const collectDuplicateGroups = (
 
   const groups: DuplicateGroup[] = [];
 
-  for (const [fingerprint, items] of groupsByHash.entries()) {
+  for (const [, items] of groupsByHash.entries()) {
     if (items.length < 2) {
       continue;
     }
 
     groups.push({
-      fingerprint,
-      items,
+      items: items.map(({ kind, header, filePath, span }) => ({ kind, header, filePath, span })),
     });
   }
 
