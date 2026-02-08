@@ -81,12 +81,6 @@ const formatText = (report: FirebatReport): string => {
   const typecheckErrors = typecheck.items.filter(i => i.severity === 'error').length;
   const formatFindings = format.status === 'needs-formatting' || format.status === 'failed' ? 1 : 0;
 
-  // ── Header ──────────────────────────────────────────────────────
-  lines.push('');
-  lines.push(`  ${cc('🔥 firebat', `${A.bold}${A.cyan}`)}  ${cc(`v${report.meta.version}`, A.dim)}`);
-  lines.push(`  ${cc(`${report.meta.targetCount} files · minSize ${report.meta.minSize} · engine ${report.meta.engine}`, A.dim)}`);
-  lines.push(cc(LINE, A.dim));
-
   // ── Summary Dashboard ───────────────────────────────────────────
   const summaryRows: SummaryRow[] = [];
 
@@ -120,9 +114,6 @@ const formatText = (report: FirebatReport): string => {
     summaryRows.push({ emoji: '🔥', label: 'Coupling Hotspots', count: coupling.hotspots.length });
   if (selectedDetectors.has('api-drift'))
     summaryRows.push({ emoji: '📐', label: 'API Drift', count: apiDrift.groups.length });
-
-  lines.push(...formatSummaryTable(summaryRows));
-  lines.push(cc(LINE, A.dim));
 
   // ── Detail Sections (only shown when findings > 0) ──────────────
 
@@ -296,6 +287,18 @@ const formatText = (report: FirebatReport): string => {
         }
       }
     }
+  }
+
+  // ── Tail Summary (repeat at end for long outputs) ──────────────
+  if (summaryRows.length > 0) {
+    lines.push(cc(LINE, A.dim));
+    lines.push(`  ${cc('🔥 firebat', `${A.bold}${A.cyan}`)}  ${cc(`v${report.meta.version}`, A.dim)}`);
+    lines.push(`  ${cc(`${report.meta.targetCount} files · minSize ${report.meta.minSize} · engine ${report.meta.engine}`, A.dim)}`);
+    lines.push(cc(THIN, A.dim));
+    lines.push(`  📊  ${cc('Summary', `${A.bold}${A.white}`)}${cc(' by detector', A.dim)}`);
+    lines.push('');
+    lines.push(...formatSummaryTable(summaryRows));
+    lines.push(cc(LINE, A.dim));
   }
 
   lines.push('');

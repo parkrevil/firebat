@@ -1,4 +1,6 @@
 // MUST: MUST-1
+import * as path from 'node:path';
+
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatReport } from '../../types';
 
@@ -35,15 +37,23 @@ import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 import type { FirebatLogger } from '../../ports/logger';
-import { createNoopLogger } from '../../ports/logger';
 
 const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
 };
 
+const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<string | undefined> => {
+  const candidate = path.join(rootAbs, basename);
+  try {
+    const file = Bun.file(candidate);
+    return (await file.exists()) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: FirebatLogger }): Promise<FirebatReport> => {
   const logger = deps.logger;
-  const tScan0 = nowMs();
 
   logger.info(`Scanning ${options.targets.length} files with ${options.detectors.length} detectors${options.fix ? ' (fix mode)' : ''}`);
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
@@ -134,7 +144,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
     if (cached) {
       logger.info('Cache hit — skipping analysis', { durationMs: Math.round(nowMs() - tCache0) });
-      logger.info('Done', { durationMs: Math.round(nowMs() - tScan0) });
+      logger.info('Analysis complete', { durationMs: 0 });
       return cached;
     }
 
@@ -155,17 +165,31 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.fix) {
     logger.debug('Running fixable tools before parse (fix mode)');
     const tFix0 = nowMs();
+
+    const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
+      resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
+      resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
+    ]);
+
     const [format, lint] = await Promise.all([
       shouldRunFormat
         ? analyzeFormat({
             targets: options.targets,
             fix: true,
             cwd: ctx.rootAbs,
-            ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
+            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
             logger,
           })
         : Promise.resolve(createEmptyFormat()),
-      shouldRunLint ? analyzeLint({ targets: options.targets, fix: true, cwd: ctx.rootAbs, logger }) : Promise.resolve(createEmptyLint()),
+      shouldRunLint
+        ? analyzeLint({
+            targets: options.targets,
+            fix: true,
+            cwd: ctx.rootAbs,
+            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
+            logger,
+          })
+        : Promise.resolve(createEmptyLint()),
     ]);
 
     formatPromise = Promise.resolve(format);
@@ -177,18 +201,28 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   } else {
     if (shouldRunFormat) {
       const tFormat0 = nowMs();
-      formatPromise = analyzeFormat({
-        targets: options.targets,
-        fix: false,
-        cwd: ctx.rootAbs,
-        ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
-        logger,
-      }).then(r => { fixTimings['format'] = Math.round(nowMs() - tFormat0); return r; });
+      formatPromise = resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc')
+        .then(oxfmtConfigPath => analyzeFormat({
+          targets: options.targets,
+          fix: false,
+          cwd: ctx.rootAbs,
+          ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
+          logger,
+        }))
+        .then(r => { fixTimings['format'] = Math.round(nowMs() - tFormat0); return r; });
     }
 
     if (shouldRunLint) {
       const tLint0 = nowMs();
-      lintPromise = analyzeLint({ targets: options.targets, fix: false, cwd: ctx.rootAbs, logger }).then(r => { fixTimings['lint'] = Math.round(nowMs() - tLint0); return r; });
+      lintPromise = resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc')
+        .then(oxlintConfigPath => analyzeLint({
+          targets: options.targets,
+          fix: false,
+          cwd: ctx.rootAbs,
+          ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
+          logger,
+        }))
+        .then(r => { fixTimings['lint'] = Math.round(nowMs() - tLint0); return r; });
     }
   }
 
@@ -375,8 +409,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
     });
     logger.trace('Report cached', { durationMs: Math.round(nowMs() - tSave0) });
   }
-
-  logger.info('Done', { durationMs: Math.round(nowMs() - tScan0) });
 
   return report;
 };
