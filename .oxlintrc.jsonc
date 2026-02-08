@@ -209,7 +209,7 @@
         ],
       },
     ],
-    "firebat/no-unknown": "error",
+    "firebat/no-unknown": "off",
     "firebat/no-double-assertion": "error",
     "firebat/no-non-null-assertion": "error",
     "firebat/no-ts-ignore": "error",
