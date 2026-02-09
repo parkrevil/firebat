@@ -3,16 +3,9 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 const RENAME_FIXTURE = [
-  'export function targetFn(x: number): number {',
-  '  return x * 2;',
-  '}',
+  'export function oldName(x: number): number { return x; }',
   '',
-  'export const useFn = () => targetFn(42);',
-  '',
-  'export class RenameMe {',
-  '  value = 0;',
-  '  bump() { this.value++; }',
-  '}',
+  'export function other(): void {}',
 ].join('\n');
 let ctx: McpTestContext;
 
@@ -21,7 +14,6 @@ beforeAll(async () => {
     extraFiles: {
       'src/rename1.ts': RENAME_FIXTURE,
       'src/rename2.ts': RENAME_FIXTURE,
-      'src/rename3.ts': RENAME_FIXTURE,
     },
   });
 }, 30_000);

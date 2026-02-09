@@ -1,0 +1,55 @@
+---
+description: MCP server usage decision tree (context7, sequential-thinking, firebat)
+alwaysApply: true
+---
+
+# MCP Usage Rules
+
+## Required MCP Tools
+
+- `context7`: package/version/option/spec/compatibility verification
+- `sequential-thinking`: all analysis/judgment/planning tasks
+- `firebat`: project codebase analysis
+
+Usage of reasoning, assumptions, simulation, memory, or experience to substitute MCP is forbidden.
+
+## Decision Tree
+
+### context7 — MUST use when ANY of these apply:
+
+1. Runtime choice (Bun vs Node API, `import.meta.*`, `Bun.file`, `Bun.spawn`, etc.)
+2. Package add/remove/version change, API usage, compatibility
+3. Public API change (CLI flags, MCP tool interface, `package.json` exports)
+4. Config file change (`.rc`, `config.ts`, `tsconfig.json`, oxlint, knip, drizzle-kit)
+5. Version/compatibility judgment (tool version differences, Node/Bun version requirements)
+
+**Procedure**: context7 call FIRST → present result to user → proceed only with context7 evidence.
+
+### MCP Bypass Prohibition
+
+- ❌ "From my memory..." / "Generally..." / "Based on docs..." / "In my experience..."
+- ❌ Presenting doc links without calling context7
+- ✅ Call context7 → present result → use as evidence
+
+### sequential-thinking — MUST use when:
+
+- Any analysis, judgment, or planning task (use as the FIRST tool call)
+- Exception: simple single-file reads or trivial lookups
+
+### firebat — Tool Selection Matrix:
+
+| Situation | Tool(s) |
+|-----------|---------|
+| After code change | `scan` (mandatory) |
+| Find symbol | `index_symbols` → `search_symbol_from_index` |
+| Refactoring | `find_references` → `rename_symbol` |
+| Code pattern search | `find_pattern` (ast-grep syntax) |
+| Type/signature check | `get_hover` |
+| External library API | `index_external_libraries` → `search_external_library_symbols` |
+
+### On MCP failure:
+
+1. STOP immediately
+2. Tell the user: "MCP tool name + what information was needed"
+3. Wait for the user to provide MCP results
+4. NEVER substitute with reasoning/assumptions

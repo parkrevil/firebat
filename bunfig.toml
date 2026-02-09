@@ -1,0 +1,17 @@
+# Runtime
+telemetry = false
+logLevel = "warn"
+
+# Test runner
+[test]
+
+[test.reporter]
+dots = true
+
+# Package manager
+[install]
+saveTextLockfile = true
+
+# bun run
+[run]
+bun = true

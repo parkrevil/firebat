@@ -201,8 +201,10 @@ export const insertBeforeSymbolUseCase = async (input: {
     }
 
     const startOff = posToOffset(prev, sym.span.start);
-    const insertion = input.body.endsWith('\n') ? input.body : input.body + '\n';
-    const next = prev.slice(0, startOff) + insertion + prev.slice(startOff);
+    const lineStartOff = prev.slice(0, startOff).lastIndexOf('\n') === -1 ? 0 : prev.slice(0, startOff).lastIndexOf('\n') + 1;
+    const insertion = input.body.startsWith('\n') ? input.body : '\n' + input.body;
+    const insertionWithNewline = insertion.endsWith('\n') ? insertion : insertion + '\n';
+    const next = prev.slice(0, lineStartOff) + insertionWithNewline + prev.slice(lineStartOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
     if (changed) {

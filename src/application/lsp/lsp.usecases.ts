@@ -43,6 +43,15 @@ const resolveLineNumber0 = (lines: string[], line: LineParam): number => {
     return Math.min(lines.length > 0 ? lines.length - 1 : 0, idx);
   }
 
+  // Numeric string: treat as 1-based line number (e.g. JSON "14" from MCP clients)
+  const parsed = Number(line);
+
+  if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+    const idx = Math.max(0, Math.floor(parsed) - 1);
+
+    return Math.min(lines.length > 0 ? lines.length - 1 : 0, idx);
+  }
+
   const needle = line;
   const idx = lines.findIndex(l => l.includes(needle));
 

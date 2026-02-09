@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "firebat": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${workspaceFolder}/dist/firebat.js", "mcp"]
+    }
+  }
+}

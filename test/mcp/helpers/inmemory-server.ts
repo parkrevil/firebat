@@ -1,0 +1,64 @@
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+// InMemoryTransport is not in the SDK's main exports; use resolved path (see AGENTS.md / plan).
+import { InMemoryTransport } from '../../../node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js';
+import { createFirebatMcpServer } from '../../../src/adapters/mcp/server';
+import { createNoopLogger } from '../../../src/ports/logger';
+
+export interface InMemoryMcpContext {
+  readonly client: Client;
+  readonly server: Awaited<ReturnType<typeof createFirebatMcpServer>>;
+  readonly rootAbs: string;
+  readonly tmpDir: string;
+  readonly close: () => Promise<void>;
+}
+
+/**
+ * Create an in-process MCP test context using InMemoryTransport.
+ * No subprocess or stdio; server and client run in the same process.
+ */
+export const createInMemoryMcpContext = async (): Promise<InMemoryMcpContext> => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'firebat-inmemory-'));
+  const firebatDir = path.join(tmpDir, '.firebat');
+
+  await mkdir(firebatDir, { recursive: true });
+
+  await writeFile(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify(
+      { name: 'firebat-inmemory-test', private: true, devDependencies: { firebat: '0.0.0' } },
+      null,
+      2,
+    ) + '\n',
+    'utf8',
+  );
+
+  const logger = createNoopLogger();
+  const server = await createFirebatMcpServer({ rootAbs: tmpDir, config: null, logger });
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  await server.connect(serverTransport as any);
+
+  const client = new Client({ name: 'firebat-inmemory-test-client', version: '0.0.0' });
+  await client.connect(clientTransport as any);
+
+  const close = async (): Promise<void> => {
+    try {
+      await client.close();
+    } catch {
+      /* best-effort */
+    }
+    try {
+      await server.close();
+    } catch {
+      /* best-effort */
+    }
+    await rm(tmpDir, { recursive: true, force: true });
+  };
+
+  return { client, server, rootAbs: tmpDir, tmpDir, close };
+};

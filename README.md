@@ -11,6 +11,8 @@ bun install
 bun run build          # → dist/firebat.js
 ```
 
+Bun behavior is configured in `bunfig.toml` at the project root.
+
 ## Quick Start
 
 ```bash

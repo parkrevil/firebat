@@ -55,8 +55,9 @@ import { readdir } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import * as path from 'node:path';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
+import { loadFirebatConfigFile } from '../../firebat-config.loader';
 import type { FirebatConfig } from '../../firebat-config';
+import type { FirebatLogger } from '../../ports/logger';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
 
 const JsonValueSchema = z.json();
@@ -229,29 +230,14 @@ const safeTool = <TArgs>(handler: (args: TArgs) => Promise<any>) => {
   };
 };
 
-const runMcpServer = async (): Promise<void> => {
-  // MCP process constraints:
-  // - No `process.exit()` calls (transport stability)
-  // - No stdout logs (reserved for protocol messages)
-
-  const ctx = await resolveRuntimeContextFromCwd();
-  let config: FirebatConfig | null = null;
-
-  try {
-    const configPath = resolveDefaultFirebatRcPath(ctx.rootAbs);
-    const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs, configPath });
-
-    config = loaded.config;
-  } catch {
-    // Best-effort: ignore config errors in MCP (no stdout logging).
-  }
-
-  const logger = createPrettyConsoleLogger({
-    level: 'warn',
-    includeStack: true,
-  });
-
-  logger.trace('MCP server: initializing', { root: ctx.rootAbs, hasConfig: config !== null });
+export const createFirebatMcpServer = async (options: {
+  rootAbs: string;
+  config?: FirebatConfig | null;
+  logger: FirebatLogger;
+}): Promise<McpServer> => {
+  const rootAbs = options.rootAbs;
+  const config = options.config ?? null;
+  const logger = options.logger;
 
   const server: any = new McpServer({
     name: 'firebat',
@@ -262,16 +248,16 @@ const runMcpServer = async (): Promise<void> => {
 
   const resolveRootAbs = (root?: string): string => {
     if (root === undefined) {
-      return ctx.rootAbs;
+      return rootAbs;
     }
 
     const trimmed = root.trim();
 
     if (trimmed.length === 0) {
-      return ctx.rootAbs;
+      return rootAbs;
     }
 
-    return path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
+    return path.isAbsolute(trimmed) ? trimmed : path.resolve(rootAbs, trimmed);
   };
 
   const diffReports = (prev: FirebatReport | null, next: FirebatReport): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
@@ -308,74 +294,6 @@ const runMcpServer = async (): Promise<void> => {
       resolvedFindings: diff < 0 ? -diff : 0,
       unchangedFindings: Math.min(prevCount, nextCount),
     };
-  };
-
-  // Bootstrap: ensure symbol index is up-to-date once on server start.
-  // Then keep it updated with best-effort directory watchers.
-  // IMPORTANT: This is deferred until AFTER `server.connect()` so VS Code clients
-  // can connect quickly without hitting tool-call timeouts.
-  const bootstrapSymbolIndex = (): void => {
-    void (async () => {
-      try {
-        logger.trace('MCP server: bootstrapping symbol index');
-
-        await indexSymbolsUseCase({ root: ctx.rootAbs, logger });
-
-        const targets = await discoverDefaultTargets(ctx.rootAbs);
-        const targetSet = new Set(targets.map(t => path.resolve(t)));
-        const dirSet = new Set(targets.map(t => path.dirname(path.resolve(t))));
-        const pending = new Set<string>();
-        let flushTimer: Timer | null = null;
-
-        const flush = (): void => {
-          flushTimer = null;
-
-          if (pending.size === 0) {
-            return;
-          }
-
-          const batch = Array.from(pending);
-
-          pending.clear();
-
-          void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
-        };
-
-        const scheduleFlush = (): void => {
-          if (flushTimer) {
-            return;
-          }
-
-          flushTimer = setTimeout(flush, 250);
-        };
-
-        for (const dirAbs of dirSet) {
-          try {
-            const w = watch(dirAbs, { persistent: true }, (_event, filename) => {
-              if (!filename) {
-                return;
-              }
-
-              const abs = path.resolve(dirAbs, String(filename));
-
-              if (!targetSet.has(abs)) {
-                return;
-              }
-
-              pending.add(abs);
-              scheduleFlush();
-            });
-
-            // Prevent the watcher from keeping large resources if closed.
-            w.on('error', () => undefined);
-          } catch {
-            continue;
-          }
-        }
-      } catch {
-        // Best-effort: MCP still serves tools even if bootstrap fails.
-      }
-    })();
   };
 
   const ScanInputSchema = z
@@ -429,8 +347,8 @@ const runMcpServer = async (): Promise<void> => {
       const t0 = nowMs();
       const rawTargets =
         args.targets !== undefined && args.targets.length > 0
-          ? args.targets.map(t => path.isAbsolute(t) ? t : path.resolve(ctx.rootAbs, t))
-          : await discoverDefaultTargets(ctx.rootAbs);
+          ? args.targets.map(t => path.isAbsolute(t) ? t : path.resolve(rootAbs, t))
+          : await discoverDefaultTargets(rootAbs);
       const targets = await expandTargets(rawTargets);
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
@@ -468,10 +386,10 @@ const runMcpServer = async (): Promise<void> => {
 
   const FindPatternInputSchema = z
     .object({
-      targets: z.array(z.string()).optional(),
-      rule: JsonValueSchema.optional(),
-      matcher: JsonValueSchema.optional(),
-      ruleName: z.string().optional(),
+      targets: z.array(z.string()).optional().describe('File or directory paths to search. If omitted, default project sources are used.'),
+      rule: JsonValueSchema.optional().describe('ast-grep YAML rule object.'),
+      matcher: JsonValueSchema.optional().describe('Pattern string to match.'),
+      ruleName: z.string().optional().describe('Name of the rule when using rule.'),
     })
     .strict();
 
@@ -479,7 +397,8 @@ const runMcpServer = async (): Promise<void> => {
     'find_pattern',
     {
       title: 'Find Pattern',
-      description: 'Run ast-grep structural pattern matching across targets. Provide a `rule` (ast-grep YAML rule object) or `matcher` (pattern string) to find matching AST nodes.',
+      description:
+        'Run ast-grep structural pattern matching across targets. Provide a rule (ast-grep YAML rule object) or matcher (pattern string). If targets is omitted, default project sources are used. Returns matching AST nodes.',
       inputSchema: FindPatternInputSchema,
       outputSchema: z
         .object({
@@ -524,10 +443,10 @@ const runMcpServer = async (): Promise<void> => {
 
   const TraceSymbolInputSchema = z
     .object({
-      entryFile: z.string(),
-      symbol: z.string(),
-      tsconfigPath: z.string().optional(),
-      maxDepth: z.number().int().nonnegative().optional(),
+      entryFile: z.string().describe('Absolute path or path relative to project root where the symbol is defined or used.'),
+      symbol: z.string().describe('Name of the symbol to trace.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+      maxDepth: z.number().int().nonnegative().optional().describe('Maximum depth of the dependency graph.'),
     })
     .strict();
 
@@ -535,7 +454,8 @@ const runMcpServer = async (): Promise<void> => {
     'trace_symbol',
     {
       title: 'Trace Symbol',
-      description: 'Trace a symbol\'s type-level dependency graph via tsgo LSP. Returns nodes (files, symbols, types) and edges showing how the symbol connects across the codebase.',
+      description:
+        "Trace a symbol's type-level dependency graph via tsgo LSP. Returns nodes (files, symbols, types) and edges showing how the symbol connects across the codebase.",
       inputSchema: TraceSymbolInputSchema,
       outputSchema: z
         .object({
@@ -567,8 +487,8 @@ const runMcpServer = async (): Promise<void> => {
 
   const LintInputSchema = z
     .object({
-      targets: z.array(z.string()),
-      configPath: z.string().optional(),
+      targets: z.array(z.string()).describe('File or directory paths to lint (relative to root or absolute).'),
+      configPath: z.string().optional().describe('Optional path to config file (e.g. .oxlintrc.json).'),
     })
     .strict();
 
@@ -576,7 +496,8 @@ const runMcpServer = async (): Promise<void> => {
     'lint',
     {
       title: 'Lint',
-      description: 'Run oxlint on the given file/directory targets and return normalized lint diagnostics. Optionally provide a custom configPath pointing to .oxlintrc.json. Returns an array of diagnostics with file, line, column, message, and severity.',
+      description:
+        'Run oxlint on the given file/directory targets and return normalized lint diagnostics. Targets are relative to root or absolute. Optionally provide configPath (e.g. .oxlintrc.json). Returns an array of diagnostics with file, line, column, message, and severity.',
       inputSchema: LintInputSchema,
       outputSchema: z
         .object({
@@ -591,7 +512,7 @@ const runMcpServer = async (): Promise<void> => {
       const request: Parameters<typeof runOxlint>[0] = {
         targets: args.targets,
         ...(args.configPath !== undefined ? { configPath: args.configPath } : {}),
-        cwd: ctx.rootAbs,
+        cwd: rootAbs,
         logger,
       };
       const result = await runOxlint(request);
@@ -611,8 +532,8 @@ const runMcpServer = async (): Promise<void> => {
 
   const ListDirInputSchema = z
     .object({
-      root: z.string().optional(),
-      relativePath: z.string(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      relativePath: z.string().describe('Path relative to root to list.'),
       recursive: z.boolean().optional().describe('If true, recursively list all entries. Default: false (non-recursive).'),
     })
     .strict();
@@ -621,7 +542,8 @@ const runMcpServer = async (): Promise<void> => {
     'list_dir',
     {
       title: 'List Dir',
-      description: 'List files and subdirectories in a directory. Set recursive=true for a full recursive listing. Returns each entry with its name and whether it is a directory. Use relativePath from root to navigate.',
+      description:
+        'List files and subdirectories in a directory. Root defaults to process.cwd() if omitted. Use relativePath from root. Set recursive=true for a full recursive listing. Returns each entry with its name and whether it is a directory.',
       inputSchema: ListDirInputSchema,
       outputSchema: z
         .object({
@@ -635,9 +557,9 @@ const runMcpServer = async (): Promise<void> => {
         .strict(),
     },
     safeTool(async (args: z.infer<typeof ListDirInputSchema>) => {
-      const cwd = process.cwd();
-      const root = args.root !== undefined && args.root.trim().length > 0 ? args.root.trim() : cwd;
-      const absRoot = path.isAbsolute(root) ? root : path.resolve(cwd, root);
+      const defaultRoot = rootAbs;
+      const root = args.root !== undefined && args.root.trim().length > 0 ? args.root.trim() : defaultRoot;
+      const absRoot = path.isAbsolute(root) ? root : path.resolve(defaultRoot, root);
       const absPath = path.resolve(absRoot, args.relativePath);
 
       if (args.recursive) {
@@ -679,7 +601,9 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const ListMemoriesInputSchema = z.object({ root: z.string().optional() }).strict();
+  const ListMemoriesInputSchema = z
+    .object({ root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.') })
+    .strict();
 
   server.registerTool(
     'list_memories',
@@ -704,7 +628,12 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const ReadMemoryInputSchema = z.object({ root: z.string().optional(), memoryKey: z.string() }).strict();
+  const ReadMemoryInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      memoryKey: z.string().describe('Unique key of the memory record to read.'),
+    })
+    .strict();
 
   server.registerTool(
     'read_memory',
@@ -736,14 +665,19 @@ const runMcpServer = async (): Promise<void> => {
   );
 
   const WriteMemoryInputSchema = z
-    .object({ root: z.string().optional(), memoryKey: z.string(), value: JsonValueSchema })
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      memoryKey: z.string().describe('Unique key for the record (e.g. "refactor-plan", "last-review-summary").'),
+      value: JsonValueSchema.describe('Arbitrary JSON value to store.'),
+    })
     .strict();
 
   server.registerTool(
     'write_memory',
     {
       title: 'Write Memory',
-      description: 'Write or overwrite a memory record with an arbitrary JSON value. The record persists in SQLite across sessions. Use memoryKey as a unique identifier (e.g. "refactor-plan", "last-review-summary").',
+      description:
+        'Write or overwrite a memory record with an arbitrary JSON value. The record persists in SQLite across sessions. Use memoryKey as a unique identifier.',
       inputSchema: WriteMemoryInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), memoryKey: z.string() })
@@ -766,7 +700,12 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const DeleteMemoryInputSchema = z.object({ root: z.string().optional(), memoryKey: z.string() }).strict();
+  const DeleteMemoryInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      memoryKey: z.string().describe('Unique key of the memory record to delete.'),
+    })
+    .strict();
 
   server.registerTool(
     'delete_memory',
@@ -798,13 +737,19 @@ const runMcpServer = async (): Promise<void> => {
   // LSMCP Index & Project (subset): symbol index/search
   // ----
 
-  const IndexSymbolsInputSchema = z.object({ root: z.string().optional(), targets: z.array(z.string()).optional() }).strict();
+  const IndexSymbolsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      targets: z.array(z.string()).optional().describe('File or directory paths to index. If omitted, default project sources are used.'),
+    })
+    .strict();
 
   server.registerTool(
     'index_symbols',
     {
       title: 'Index Symbols',
-      description: 'Parse and index all symbols (functions, classes, types, variables) from the given targets into SQLite. Required before using search_symbol_from_index.',
+      description:
+        'Parse and index all symbols (functions, classes, types, variables) from the given targets into SQLite. Required before using search_symbol_from_index. If targets is omitted, default sources are used.',
       inputSchema: IndexSymbolsInputSchema,
       outputSchema: z
         .object({
@@ -836,11 +781,11 @@ const runMcpServer = async (): Promise<void> => {
 
   const SearchSymbolFromIndexInputSchema = z
     .object({
-      root: z.string().optional(),
-      query: z.string(),
-      kind: z.union([z.string(), z.array(z.string())]).optional(),
-      file: z.string().optional(),
-      limit: z.number().int().positive().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      query: z.string().describe('Substring to match symbol names.'),
+      kind: z.union([z.string(), z.array(z.string())]).optional().describe('Filter by kind (e.g. "function", "class", "type").'),
+      file: z.string().optional().describe('Filter by file path substring.'),
+      limit: z.number().int().positive().optional().describe('Maximum number of matches to return.'),
     })
     .strict();
 
@@ -848,7 +793,8 @@ const runMcpServer = async (): Promise<void> => {
     'search_symbol_from_index',
     {
       title: 'Search Symbol From Index',
-      description: 'Search indexed symbols by substring match on name. Optionally filter by symbol kind (e.g. "function", "class", "type") and/or file path substring.',
+      description:
+        'Search indexed symbols by substring match on name. Optionally filter by symbol kind (e.g. "function", "class", "type") and/or file path substring. Requires index_symbols to have been run first.',
       inputSchema: SearchSymbolFromIndexInputSchema,
       outputSchema: z
         .object({
@@ -893,7 +839,9 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const ClearIndexInputSchema = z.object({ root: z.string().optional() }).strict();
+  const ClearIndexInputSchema = z
+    .object({ root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.') })
+    .strict();
 
   server.registerTool(
     'clear_index',
@@ -917,13 +865,16 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetProjectOverviewInputSchema = z.object({ root: z.string().optional() }).strict();
+  const GetProjectOverviewInputSchema = z
+    .object({ root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.') })
+    .strict();
 
   server.registerTool(
     'get_project_overview',
     {
       title: 'Get Project Overview',
-      description: 'Return project overview: indexed file count, symbol count, last indexed timestamp, tool availability (tsgo, oxlint), last scan timestamp, and root path.',
+      description:
+        'Return project overview: indexed file count, symbol count, last indexed timestamp, tool availability (tsgo, oxlint), last scan timestamp, and root path. Root defaults to process.cwd() if omitted.',
       inputSchema: GetProjectOverviewInputSchema,
       outputSchema: z
         .object({
@@ -946,21 +897,21 @@ const runMcpServer = async (): Promise<void> => {
       // Best-effort tool availability check
       const tsgoAvailable = await (async () => {
         try {
-          const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+          const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
           return r.ok === true;
         } catch { return false; }
       })();
       const oxlintAvailable = await (async () => {
         try {
-          const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
+          const r = await runOxlint({ targets: [], cwd: rootAbs, logger });
 
           // If targets is empty, oxlint may still report ok=false for "no targets" but the tool itself is found.
           return r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
         } catch { return false; }
       })();
       const structured = {
-        root: ctx.rootAbs,
+        root: rootAbs,
         symbolIndex,
         tools: { tsgo: tsgoAvailable, oxlint: oxlintAvailable },
         lastScanAt: lastScanTimestamp,
@@ -979,12 +930,16 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetHoverInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      character: z.number().int().nonnegative().optional(),
-      target: z.string().optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string). A non-numeric string is treated as content search (first line containing that text).',
+        ),
+      character: z.number().int().nonnegative().optional().describe('0-based column. Optional; used with line for exact position.'),
+      target: z.string().optional().describe('Optional substring to auto-locate the symbol on the line.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -992,7 +947,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_hover',
     {
       title: 'Get Hover',
-      description: 'Get type information and documentation for a symbol at a specific position via tsgo LSP. Provide line + character for exact position, or use target string to auto-locate the symbol in the line.',
+      description:
+        'Get type information and documentation for a symbol at a specific position via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. Provide line + character for exact position, or use target to auto-locate the symbol in the line.',
       inputSchema: GetHoverInputSchema,
       outputSchema: z.object({ ok: z.boolean(), hover: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
     },
@@ -1014,11 +970,15 @@ const runMcpServer = async (): Promise<void> => {
 
   const FindReferencesInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      symbolName: z.string(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string) where the symbol appears. A non-numeric string is treated as content search.',
+        ),
+      symbolName: z.string().describe('Name of the symbol to find references for.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1026,7 +986,8 @@ const runMcpServer = async (): Promise<void> => {
     'find_references',
     {
       title: 'Find References',
-      description: 'Find all references to a symbol across the project via tsgo LSP. Returns each reference location with file path, line, and column. Requires symbolName and approximate line in the file where it appears.',
+      description:
+        'Find all references to a symbol across the project via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. Requires symbolName and the approximate line in the file where the symbol appears. Returns each reference location with file path, line, and column.',
       inputSchema: FindReferencesInputSchema,
       outputSchema: z.object({ ok: z.boolean(), references: z.array(z.any()).optional(), error: z.string().optional() }).strict(),
     },
@@ -1047,14 +1008,18 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetDefinitionsInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      symbolName: z.string(),
-      before: z.number().int().nonnegative().optional(),
-      after: z.number().int().nonnegative().optional(),
-      include_body: z.boolean().optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string). A non-numeric string is treated as content search.',
+        ),
+      symbolName: z.string().describe('Name of the symbol to jump to.'),
+      before: z.number().int().nonnegative().optional().describe('Number of context lines before the definition. Default 2.'),
+      after: z.number().int().nonnegative().optional().describe('Number of context lines after the definition. Default 2.'),
+      include_body: z.boolean().optional().describe('If true, include the full function/class body in the preview.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1062,7 +1027,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_definitions',
     {
       title: 'Get Definitions',
-      description: 'Jump to the definition of a symbol via tsgo LSP and return a source preview. Use before/after (default 2) to control context lines around the definition. Set include_body=true to get the full function/class body.',
+      description:
+        'Jump to the definition of a symbol via tsgo LSP and return a source preview. Root defaults to process.cwd(); filePath is relative to root or absolute. Use before/after (default 2) to control context lines. Set include_body=true to get the full function/class body.',
       inputSchema: GetDefinitionsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), definitions: z.array(z.any()).optional(), error: z.string().optional() }).strict(),
     },
@@ -1086,11 +1052,11 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetDiagnosticsInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      timeoutMs: z.number().int().positive().optional(),
-      forceRefresh: z.boolean().optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute. Single file only.'),
+      timeoutMs: z.number().int().positive().optional().describe('Maximum wait time in ms for large files.'),
+      forceRefresh: z.boolean().optional().describe('If true, bypass cache and pull fresh diagnostics.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1098,7 +1064,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_diagnostics',
     {
       title: 'Get Diagnostics',
-      description: 'Get TypeScript diagnostics (errors, warnings) for a single file via tsgo LSP pull diagnostics. Use forceRefresh=true to bypass cache. Set timeoutMs to limit wait time for large files.',
+      description:
+        'Get TypeScript diagnostics (errors, warnings) for a single file via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. Use forceRefresh=true to bypass cache. Set timeoutMs to limit wait time for large files.',
       inputSchema: GetDiagnosticsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), diagnostics: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1117,13 +1084,19 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetAllDiagnosticsInputSchema = z.object({ root: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
+  const GetAllDiagnosticsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+    })
+    .strict();
 
   server.registerTool(
     'get_all_diagnostics',
     {
       title: 'Get All Diagnostics',
-      description: 'Get TypeScript diagnostics for all files in the project via tsgo LSP workspace diagnostics. Returns errors and warnings across the entire codebase in one call.',
+      description:
+        'Get TypeScript diagnostics for all files in the project via tsgo LSP workspace diagnostics. Returns errors and warnings across the entire codebase in one call. Note: If the tsgo LSP does not support workspace diagnostics, this returns an error; use get_diagnostics per file instead.',
       inputSchema: GetAllDiagnosticsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), diagnostics: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1139,13 +1112,20 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetDocumentSymbolsInputSchema = z.object({ root: z.string().optional(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const GetDocumentSymbolsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+    })
+    .strict();
 
   server.registerTool(
     'get_document_symbols',
     {
       title: 'Get Document Symbols',
-      description: 'List all symbols (functions, classes, variables, types, etc.) in a single file via tsgo LSP. Returns a hierarchical symbol tree with names, kinds, and ranges.',
+      description:
+        'List all symbols (functions, classes, variables, types, etc.) in a single file via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. Returns a hierarchical symbol tree with names, kinds, and ranges.',
       inputSchema: GetDocumentSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1162,13 +1142,20 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetWorkspaceSymbolsInputSchema = z.object({ root: z.string().optional(), query: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
+  const GetWorkspaceSymbolsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      query: z.string().optional().describe('Filter symbols by name substring. If omitted, behavior is implementation-dependent.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+    })
+    .strict();
 
   server.registerTool(
     'get_workspace_symbols',
     {
       title: 'Get Workspace Symbols',
-      description: 'Search for symbols across the entire workspace via tsgo LSP. Provide a query string to filter by name. Returns matching symbols with their file paths, kinds, and locations.',
+      description:
+        'Search for symbols across the entire workspace via tsgo LSP. Root defaults to process.cwd(). Provide a query string to filter by name. Returns matching symbols with their file paths, kinds, and locations.',
       inputSchema: GetWorkspaceSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1187,11 +1174,15 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetCompletionInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      character: z.number().int().nonnegative().optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string) for the completion position. A non-numeric string is treated as content search.',
+        ),
+      character: z.number().int().nonnegative().optional().describe('0-based column for the completion position.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1199,7 +1190,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_completion',
     {
       title: 'Get Completion',
-      description: 'Get code completion suggestions at a specific cursor position via tsgo LSP. Returns available completions with labels, kinds, and documentation.',
+      description:
+        'Get code completion suggestions at a specific cursor position via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. line and character specify the position where completion is requested. Returns available completions with labels, kinds, and documentation.',
       inputSchema: GetCompletionInputSchema,
       outputSchema: z.object({ ok: z.boolean(), completion: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1220,11 +1212,15 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetSignatureHelpInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      character: z.number().int().nonnegative().optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string) inside a function/method call. A non-numeric string is treated as content search.',
+        ),
+      character: z.number().int().nonnegative().optional().describe('0-based column inside the call expression.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1232,7 +1228,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_signature_help',
     {
       title: 'Get Signature Help',
-      description: 'Get function/method signature help at a cursor position via tsgo LSP. Returns parameter information, active parameter index, and documentation for the current call expression.',
+      description:
+        'Get function/method signature help at a cursor position via tsgo LSP. Call this when the cursor is inside a function or method call. Root defaults to process.cwd(); filePath is relative to root or absolute. Returns parameter information, active parameter index, and documentation.',
       inputSchema: GetSignatureHelpInputSchema,
       outputSchema: z.object({ ok: z.boolean(), signatureHelp: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1251,13 +1248,20 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const FormatDocumentInputSchema = z.object({ root: z.string().optional(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const FormatDocumentInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to a file or directory. If directory, formats all .ts/.tsx files recursively.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+    })
+    .strict();
 
   server.registerTool(
     'format_document',
     {
       title: 'Format Document',
-      description: 'Auto-format TypeScript/JavaScript files using tsgo LSP formatting. filePath can be a single file or a directory (formats all .ts/.tsx files recursively). Returns changed=true and changedCount for the number of modified files.',
+      description:
+        'Auto-format TypeScript/JavaScript files using tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. If filePath is a directory, formats all .ts/.tsx files under it recursively. Returns changed=true and changedCount for the number of modified files.',
       inputSchema: FormatDocumentInputSchema,
       outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), changedCount: z.number().optional(), error: z.string().optional() }).strict(),
     },
@@ -1306,12 +1310,17 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetCodeActionsInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      startLine: z.union([z.number(), z.string()]),
-      endLine: z.union([z.number(), z.string()]).optional(),
-      includeKinds: z.array(z.string()).optional(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      startLine: z
+        .union([z.number(), z.string()])
+        .describe('1-based start line of the range (required). Number or numeric string.'),
+      endLine: z
+        .union([z.number(), z.string()])
+        .optional()
+        .describe('1-based end line of the range. If omitted, defaults to startLine.'),
+      includeKinds: z.array(z.string()).optional().describe('Filter actions by kind (e.g. "quickfix").'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1319,7 +1328,8 @@ const runMcpServer = async (): Promise<void> => {
     'get_code_actions',
     {
       title: 'Get Code Actions',
-      description: 'Get available quick-fixes for a line range via tsgo LSP. Note: tsgo currently only supports "quickfix" actions (no refactor/extract/inline). Use includeKinds to filter. Provide startLine and optionally endLine.',
+      description:
+        'Get available quick-fixes for a line range via tsgo LSP. startLine is required; endLine is optional. tsgo currently only supports "quickfix" actions (no refactor/extract/inline). Root defaults to process.cwd(); filePath is relative to root or absolute. Use includeKinds to filter.',
       inputSchema: GetCodeActionsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), actions: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1341,12 +1351,15 @@ const runMcpServer = async (): Promise<void> => {
 
   const RenameSymbolInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]).optional(),
-      symbolName: z.string(),
-      newName: z.string(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to a file containing the symbol. Absolute path recommended.'),
+      line: z
+        .union([z.number(), z.string()])
+        .optional()
+        .describe('1-based line where the symbol appears. If omitted, the first occurrence in the file is used.'),
+      symbolName: z.string().describe('Current name of the symbol.'),
+      newName: z.string().describe('New name to apply.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1354,7 +1367,8 @@ const runMcpServer = async (): Promise<void> => {
     'rename_symbol',
     {
       title: 'Rename Symbol',
-      description: 'Rename a symbol across all files in the project via tsgo LSP. Applies changes atomically and returns the list of changed files. Provide symbolName (current name) and newName.',
+      description:
+        'Rename a symbol across all files in the project via tsgo LSP. Applies changes atomically and returns the list of changed files. filePath is relative to root or absolute (absolute recommended). If line is omitted, the first occurrence in the file is used. Provide symbolName and newName.',
       inputSchema: RenameSymbolInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), changedFiles: z.array(z.string()).optional(), error: z.string().optional() })
@@ -1378,11 +1392,15 @@ const runMcpServer = async (): Promise<void> => {
 
   const DeleteSymbolInputSchema = z
     .object({
-      root: z.string().optional(),
-      filePath: z.string(),
-      line: z.union([z.number(), z.string()]),
-      symbolName: z.string(),
-      tsconfigPath: z.string().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+      line: z
+        .union([z.number(), z.string()])
+        .describe(
+          '1-based line number (number or numeric string) where the symbol appears. A non-numeric string is treated as content search.',
+        ),
+      symbolName: z.string().describe('Name of the symbol to delete.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
 
@@ -1390,7 +1408,8 @@ const runMcpServer = async (): Promise<void> => {
     'delete_symbol',
     {
       title: 'Delete Symbol',
-      description: 'Delete a symbol\'s entire definition from the source file. Locates the symbol via tsgo LSP definition lookup at the given line, then removes the full declaration block.',
+      description:
+        "Delete a symbol's entire definition from the source file. Root defaults to process.cwd(); filePath is relative to root or absolute. line is the 1-based line number (number or numeric string) where the symbol appears. Locates the symbol via tsgo LSP definition lookup, then removes the full declaration block.",
       inputSchema: DeleteSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), error: z.string().optional() }).strict(),
     },
@@ -1409,13 +1428,19 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const CheckCapabilitiesInputSchema = z.object({ root: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
+  const CheckCapabilitiesInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
+    })
+    .strict();
 
   server.registerTool(
     'check_capabilities',
     {
       title: 'Check Capabilities',
-      description: 'Report which LSP capabilities the tsgo server supports (hover, references, definition, formatting, etc.). Useful to check feature availability before calling other LSP tools.',
+      description:
+        'Report which LSP capabilities the tsgo server supports (hover, references, definition, formatting, etc.). Root defaults to process.cwd(). Useful to check feature availability before calling other LSP tools.',
       inputSchema: CheckCapabilitiesInputSchema,
       outputSchema: z.object({ ok: z.boolean(), capabilities: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
     },
@@ -1437,13 +1462,13 @@ const runMcpServer = async (): Promise<void> => {
 
   const ReplaceRangeInputSchema = z
     .object({
-      root: z.string().optional(),
-      relativePath: z.string(),
-      startLine: z.number().int().positive(),
-      startColumn: z.number().int().positive(),
-      endLine: z.number().int().positive(),
-      endColumn: z.number().int().positive(),
-      newText: z.string(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      relativePath: z.string().describe('Path to the file relative to root.'),
+      startLine: z.number().int().positive().describe('1-based start line of the range.'),
+      startColumn: z.number().int().positive().describe('1-based start column of the range.'),
+      endLine: z.number().int().positive().describe('1-based end line of the range.'),
+      endColumn: z.number().int().positive().describe('1-based end column of the range.'),
+      newText: z.string().describe('Replacement content.'),
     })
     .strict();
 
@@ -1451,7 +1476,8 @@ const runMcpServer = async (): Promise<void> => {
     'replace_range',
     {
       title: 'Replace Range',
-      description: 'Replace text in a specific 1-based line/column range within a file. Provide startLine, startColumn, endLine, endColumn to define the range, and newText for the replacement content.',
+      description:
+        'Replace text in a specific 1-based line/column range within a file. All coordinates are 1-based. relativePath is relative to root. Provide startLine, startColumn, endLine, endColumn and newText.',
       inputSchema: ReplaceRangeInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
@@ -1465,11 +1491,11 @@ const runMcpServer = async (): Promise<void> => {
 
   const ReplaceRegexInputSchema = z
     .object({
-      root: z.string().optional(),
-      relativePath: z.string(),
-      regex: z.string(),
-      repl: z.string(),
-      allowMultipleOccurrences: z.boolean().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      relativePath: z.string().describe('Path to the file relative to root.'),
+      regex: z.string().describe('Regular expression pattern.'),
+      repl: z.string().describe('Replacement string.'),
+      allowMultipleOccurrences: z.boolean().optional().describe('If true, replace all matches; otherwise only the first.'),
     })
     .strict();
 
@@ -1477,7 +1503,8 @@ const runMcpServer = async (): Promise<void> => {
     'replace_regex',
     {
       title: 'Replace Regex',
-      description: 'Apply a regex-based text replacement across a file using global/multiline/dotAll flags (gms). By default replaces only the first match; set allowMultipleOccurrences=true to replace all matches.',
+      description:
+        'Apply a regex-based text replacement across a file using global/multiline/dotAll flags (gms). By default replaces only the first match; set allowMultipleOccurrences=true to replace all matches. relativePath is relative to root.',
       inputSchema: ReplaceRegexInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), matchCount: z.number().optional(), error: z.string().optional() })
@@ -1500,13 +1527,21 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const ReplaceSymbolBodyInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const ReplaceSymbolBodyInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      namePath: z.string().describe('Symbol path (e.g. "MyClass.myMethod" or "myFunction").'),
+      relativePath: z.string().describe('Path to the file relative to root.'),
+      body: z.string().describe('New implementation; omit outer braces.'),
+    })
+    .strict();
 
   server.registerTool(
     'replace_symbol_body',
     {
       title: 'Replace Symbol Body',
-      description: 'Replace the entire block body of a function, method, or class identified by namePath (e.g. "MyClass.myMethod" or "myFunction"). The body parameter should contain the new implementation without braces.',
+      description:
+        'Replace the entire block body of a function, method, or class identified by namePath (e.g. "MyClass.myMethod" or "myFunction"). The body parameter should contain the new implementation without outer braces.',
       inputSchema: ReplaceSymbolBodyInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
@@ -1518,13 +1553,21 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const InsertBeforeSymbolInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const InsertBeforeSymbolInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      namePath: z.string().describe('Symbol to insert before (e.g. "MyClass" or "myFunction").'),
+      relativePath: z.string().describe('Path to the file relative to root.'),
+      body: z.string().describe('Text to insert (e.g. comment, decorator, or new declaration).'),
+    })
+    .strict();
 
   server.registerTool(
     'insert_before_symbol',
     {
       title: 'Insert Before Symbol',
-      description: 'Insert text immediately before a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding imports, comments, decorators, or new declarations above a symbol.',
+      description:
+        'Insert text immediately before a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding imports, comments, decorators, or new declarations above a symbol. relativePath is relative to root. When supported, insertion is on a new line above the symbol.',
       inputSchema: InsertBeforeSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
@@ -1536,13 +1579,21 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const InsertAfterSymbolInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const InsertAfterSymbolInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      namePath: z.string().describe('Symbol to insert after (e.g. "MyClass" or "myFunction").'),
+      relativePath: z.string().describe('Path to the file relative to root.'),
+      body: z.string().describe('Text to insert (e.g. related function or export).'),
+    })
+    .strict();
 
   server.registerTool(
     'insert_after_symbol',
     {
       title: 'Insert After Symbol',
-      description: 'Insert text immediately after a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding related functions, exports, or test scaffolding below a symbol.',
+      description:
+        'Insert text immediately after a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding related functions, exports, or test scaffolding below a symbol. relativePath is relative to root.',
       inputSchema: InsertAfterSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
@@ -1560,10 +1611,10 @@ const runMcpServer = async (): Promise<void> => {
 
   const IndexExternalLibrariesInputSchema = z
     .object({
-      root: z.string().optional(),
-      maxFiles: z.number().int().positive().optional(),
-      includePatterns: z.array(z.string()).optional(),
-      excludePatterns: z.array(z.string()).optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      maxFiles: z.number().int().positive().optional().describe('Maximum number of .d.ts files to index.'),
+      includePatterns: z.array(z.string()).optional().describe('Package names or path patterns to include (e.g. ["zod"]).'),
+      excludePatterns: z.array(z.string()).optional().describe('Package names or path patterns to exclude.'),
     })
     .strict();
 
@@ -1571,7 +1622,8 @@ const runMcpServer = async (): Promise<void> => {
     'index_external_libraries',
     {
       title: 'Index External Libraries',
-      description: 'Parse and index TypeScript declaration files (.d.ts) from node_modules into memory for external symbol search. Use includePatterns/excludePatterns to filter libraries. Required before using search_external_library_symbols.',
+      description:
+        'Parse and index TypeScript declaration files (.d.ts) from node_modules into memory for external symbol search. Only .d.ts files under node_modules are indexed. includePatterns and excludePatterns filter by package name or path. Required before using search_external_library_symbols.',
       inputSchema: IndexExternalLibrariesInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), indexedFiles: z.number(), symbols: z.number(), error: z.string().optional() })
@@ -1591,13 +1643,16 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetTypescriptDependenciesInputSchema = z.object({ root: z.string().optional() }).strict();
+  const GetTypescriptDependenciesInputSchema = z
+    .object({ root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.') })
+    .strict();
 
   server.registerTool(
     'get_typescript_dependencies',
     {
       title: 'Get TypeScript Dependencies',
-      description: 'List all npm dependencies (from package.json) that provide TypeScript type declarations. Checks for bundled types and @types/* packages. Useful for deciding which libraries to index with index_external_libraries.',
+      description:
+        'List all npm dependencies (from package.json) that provide TypeScript type declarations. Checks for bundled types and @types/* packages. Useful for deciding which libraries to index with index_external_libraries.',
       inputSchema: GetTypescriptDependenciesInputSchema,
       outputSchema: z.object({ ok: z.boolean(), dependencies: z.array(z.object({ name: z.string(), version: z.string(), hasTypes: z.boolean() })).optional(), error: z.string().optional() }).strict(),
     },
@@ -1611,11 +1666,11 @@ const runMcpServer = async (): Promise<void> => {
 
   const SearchExternalLibrarySymbolsInputSchema = z
     .object({
-      root: z.string().optional(),
-      libraryName: z.string().optional(),
-      symbolName: z.string().optional(),
-      kind: z.string().optional(),
-      limit: z.number().int().positive().optional(),
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      libraryName: z.string().optional().describe('Filter by library/package name.'),
+      symbolName: z.string().optional().describe('Substring to match symbol names.'),
+      kind: z.string().optional().describe('Filter by symbol kind.'),
+      limit: z.number().int().positive().optional().describe('Maximum number of matches to return.'),
     })
     .strict();
 
@@ -1623,7 +1678,8 @@ const runMcpServer = async (): Promise<void> => {
     'search_external_library_symbols',
     {
       title: 'Search External Library Symbols',
-      description: 'Search symbols from indexed external libraries (node_modules). Filter by libraryName, symbolName substring, and/or kind. Requires index_external_libraries to be run first.',
+      description:
+        'Search symbols from indexed external libraries (node_modules). Filter by libraryName, symbolName substring, and/or kind. Requires index_external_libraries to be run first.',
       inputSchema: SearchExternalLibrarySymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), matches: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1641,13 +1697,19 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const GetAvailableExternalSymbolsInputSchema = z.object({ root: z.string().optional(), filePath: z.string() }).strict();
+  const GetAvailableExternalSymbolsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+    })
+    .strict();
 
   server.registerTool(
     'get_available_external_symbols',
     {
       title: 'Get Available External Symbols',
-      description: 'List all symbol names that are imported in a given file. Parses import declarations to extract named imports, default imports, and namespace imports. Quick way to see what a file depends on.',
+      description:
+        'List all symbol names that are imported in a given file. Parses import declarations only (named, default, namespace imports). Quick way to see what a file depends on. filePath is relative to root or absolute.',
       inputSchema: GetAvailableExternalSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.array(z.string()), error: z.string().optional() }).strict(),
     },
@@ -1659,13 +1721,19 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
-  const ParseImportsInputSchema = z.object({ root: z.string().optional(), filePath: z.string() }).strict();
+  const ParseImportsInputSchema = z
+    .object({
+      root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
+      filePath: z.string().describe('Path to the file, relative to root or absolute.'),
+    })
+    .strict();
 
   server.registerTool(
     'parse_imports',
     {
       title: 'Parse Imports',
-      description: 'Parse all import statements in a file and return structured details: specifier, imported names, type-only status, and resolved paths for relative imports. More detailed than get_available_external_symbols.',
+      description:
+        'Parse all import statements in a file and return structured details: specifier, imported names, type-only status, and resolved paths for relative imports. More detailed than get_available_external_symbols.',
       inputSchema: ParseImportsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), imports: z.any().optional(), error: z.string().optional() }).strict(),
     },
@@ -1681,13 +1749,16 @@ const runMcpServer = async (): Promise<void> => {
   // check_tool_availability: consolidated tool status check
   // ----
 
-  const CheckToolAvailabilityInputSchema = z.object({ root: z.string().optional() }).strict();
+  const CheckToolAvailabilityInputSchema = z
+    .object({ root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.') })
+    .strict();
 
   server.registerTool(
     'check_tool_availability',
     {
       title: 'Check Tool Availability',
-      description: 'Check availability of all external tools used by firebat: tsgo (LSP/typecheck), oxlint (linting), and ast-grep (pattern matching). Returns a boolean for each tool and version info when available.',
+      description:
+        'Check availability of all external tools used by firebat: tsgo (LSP/typecheck), oxlint (linting), and ast-grep (pattern matching). Returns a boolean for each tool and version info when available.',
       inputSchema: CheckToolAvailabilityInputSchema,
       outputSchema: z
         .object({
@@ -1700,14 +1771,14 @@ const runMcpServer = async (): Promise<void> => {
     safeTool(async (_args: z.infer<typeof CheckToolAvailabilityInputSchema>) => {
       const tsgo = await (async () => {
         try {
-          const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+          const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
           return { available: r.ok === true, ...(r.note ? { note: r.note } : {}) };
         } catch { return { available: false, note: 'check failed' }; }
       })();
       const oxlint = await (async () => {
         try {
-          const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
+          const r = await runOxlint({ targets: [], cwd: rootAbs, logger });
           const available = r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
 
           return { available, ...(r.error && !available ? { note: r.error } : {}) };
@@ -1813,6 +1884,85 @@ const runMcpServer = async (): Promise<void> => {
     }),
   );
 
+  return server;
+};
+
+export const runMcpServer = async (): Promise<void> => {
+  const ctx = await resolveRuntimeContextFromCwd();
+  const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs }).catch(() => null);
+  const config = loaded?.config ?? null;
+  const logger = createPrettyConsoleLogger({ level: 'warn' });
+
+  const server = await createFirebatMcpServer({ rootAbs: ctx.rootAbs, config, logger });
+
+  // Bootstrap: ensure symbol index is up-to-date once on server start.
+  // Then keep it updated with best-effort directory watchers.
+  // IMPORTANT: This is deferred until AFTER `server.connect()` so VS Code clients
+  // can connect quickly without hitting tool-call timeouts.
+  const bootstrapSymbolIndex = (): void => {
+    void (async () => {
+      try {
+        logger.trace('MCP server: bootstrapping symbol index');
+
+        await indexSymbolsUseCase({ root: ctx.rootAbs, logger });
+
+        const targets = await discoverDefaultTargets(ctx.rootAbs);
+        const targetSet = new Set(targets.map(t => path.resolve(t)));
+        const dirSet = new Set(targets.map(t => path.dirname(path.resolve(t))));
+        const pending = new Set<string>();
+        let flushTimer: Timer | null = null;
+
+        const flush = (): void => {
+          flushTimer = null;
+
+          if (pending.size === 0) {
+            return;
+          }
+
+          const batch = Array.from(pending);
+
+          pending.clear();
+
+          void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
+        };
+
+        const scheduleFlush = (): void => {
+          if (flushTimer) {
+            return;
+          }
+
+          flushTimer = setTimeout(flush, 250);
+        };
+
+        for (const dirAbs of dirSet) {
+          try {
+            const w = watch(dirAbs, { persistent: true }, (_event, filename) => {
+              if (!filename) {
+                return;
+              }
+
+              const abs = path.resolve(dirAbs, String(filename));
+
+              if (!targetSet.has(abs)) {
+                return;
+              }
+
+              pending.add(abs);
+              scheduleFlush();
+            });
+
+            // Prevent the watcher from keeping large resources if closed.
+            w.on('error', () => undefined);
+          } catch {
+            continue;
+          }
+        }
+      } catch {
+        // Best-effort: MCP still serves tools even if bootstrap fails.
+      }
+    })();
+  };
+
   const transport = new StdioServerTransport();
 
   logger.info('MCP server: connecting transport');
@@ -1877,5 +2027,3 @@ const runMcpServer = async (): Promise<void> => {
 
   bootstrapSymbolIndex();
 };
-
-export { runMcpServer };
