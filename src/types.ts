@@ -317,7 +317,6 @@ export interface UnknownProofAnalysis {
 
 export interface FirebatMeta {
   readonly engine: 'oxc';
-  readonly version: string;
   readonly targetCount: number;
   readonly minSize: number;
   readonly maxForwardDepth: number;

@@ -280,7 +280,6 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 };
 
 const runCli = async (argv: readonly string[]): Promise<number> => {
-  const tRun0 = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
   let options: FirebatCliOptions;
   // Create early logger for resolveOptions; upgraded after options are known.
   const earlyLogger = createCliLogger({ level: undefined, logStack: undefined });
@@ -352,11 +351,6 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   logger.debug(`Blocking findings: ${findingCount}`);
 
   const exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
-  // Must be last line in CLI output (stderr).
-  const tRun1 = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-
-  logger.info('Done', { durationMs: Math.round(tRun1 - tRun0) });
-
   return exitCode;
 };
 

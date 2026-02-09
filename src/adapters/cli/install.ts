@@ -331,46 +331,80 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
 const AGENT_PROMPT_BLOCK = [
   '## firebat (MCP Code Quality Scanner)',
   '',
-  'This project uses a firebat MCP server for automated code quality analysis.',
+  'Firebat provides both a CLI and an MCP server for code quality analysis and refactoring support.',
   '',
-  '### Tool Categories',
-  '- 🔍 Analysis: `scan` (15 detectors), `lint` (oxlint), `find_pattern` (ast-grep structural search)',
+  '### What to do (for your AI agent)',
+  '- Use MCP to discover all available firebat tools and prompts (via your client\'s MCP tooling or `check_capabilities`).',
+  '- Ask the user about their project constraints (stack, CI, coding conventions, risk tolerance).',
+  '- Propose a project-specific workflow that uses firebat to prevent regressions and keep code style consistent.',
+  '- When suggesting or making code changes, validate with the appropriate tools (e.g. `scan`, `lint`, typecheck).',
+  '- Add the agreed workflow as project-specific agent rules so it stays consistent over time.',
+  '',
+  '### Tool Categories (reference)',
+  '- 🔍 Analysis: `scan` (detectors), `lint` (oxlint), `find_pattern` (ast-grep structural search)',
   '- 🧭 Navigation: `get_hover`, `get_definitions`, `find_references`, `trace_symbol`, `parse_imports`, `get_document_symbols`, `get_workspace_symbols`, `get_signature_help`',
   '- ✏️ Editing: `replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, `rename_symbol`, `delete_symbol`, `format_document`, `get_code_actions`',
   '- 📇 Indexing: `index_symbols`, `search_symbol_from_index`, `clear_index`, `get_project_overview`',
   '- 📦 External libs: `index_external_libraries`, `search_external_library_symbols`, `get_available_external_symbols`, `get_typescript_dependencies`',
   '- 🧠 Memory: `read_memory`, `write_memory`, `list_memories`, `delete_memory`',
   '- 🛠️ Infra: `list_dir`, `get_diagnostics`, `get_all_diagnostics`, `get_completion`, `check_capabilities`',
-  '',
-  '### Required Rules',
-  '- After any code change, always run `scan` to check for quality regressions.',
-  '- Review scan findings and address them in priority order before moving on.',
-  '',
-  '### When to Use What',
-  '- After editing code → `scan`',
-  '- Finding a symbol → `index_symbols` → `search_symbol_from_index`',
-  '- Refactoring → `find_references` → `rename_symbol`',
-  '- Searching code patterns → `find_pattern` (ast-grep syntax)',
-  '- Checking types / signatures → `get_hover`',
-  '- Exploring external library APIs → `index_external_libraries` → `search_external_library_symbols`',
-  '- Reviewing analysis results → invoke the `workflow` or `review` prompt',
 ].join('\n');
 
 const printAgentPromptGuide = (): void => {
   const c = isTty();
   const border = '│';
   const promptLines = AGENT_PROMPT_BLOCK.split('\n');
+
+  const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+  const getBoxInnerWidth = (): number => {
+    const columns = (process as any)?.stdout?.columns;
+    if (typeof columns !== 'number' || !Number.isFinite(columns)) return 72;
+
+    // Layout: "  " + "│ " + content + "" (we print the right border separately).
+    // Keep it within a readable range even on very wide terminals.
+    const available = columns - 2 /* leading indent */ - 2 /* left border + space */ - 2 /* space + right border */;
+
+    return clamp(available, 48, 100);
+  };
+
+  const wrapLine = (line: string, width: number): string[] => {
+    const out: string[] = [];
+    let rest = line;
+
+    while (rest.length > width) {
+      const slice = rest.slice(0, width + 1);
+      let cut = slice.lastIndexOf(' ');
+
+      if (cut <= 0) {
+        // No whitespace to break on.
+        cut = width;
+      }
+
+      out.push(rest.slice(0, cut).trimEnd());
+      rest = rest.slice(cut).trimStart();
+    }
+
+    out.push(rest);
+
+    return out;
+  };
+
+  const boxWidth = getBoxInnerWidth();
+  const boxedPromptLines = promptLines.flatMap((line) => wrapLine(line, boxWidth));
   const guideLines = [
     '',
     `  ${hc('🤖 Agent Integration', `${H.bold}${H.cyan}`, c)}`,
     '',
-    `  Copy the block below into your agent's instruction file`,
-    `  ${hc('(e.g. copilot-instructions.md, AGENTS.md, .cursor/rules)', H.dim, c)}`,
-    `  so your AI agent can leverage firebat automatically:`,
+    `  Share the block below with your AI agent`,
+    `  so it can discover firebat capabilities and tailor a workflow for this project:`,
     '',
-    `  ${hc('┌' + '─'.repeat(72), H.dim, c)}`,
-    ...promptLines.map(line => `  ${hc(border, H.dim, c)} ${line}`),
-    `  ${hc('└' + '─'.repeat(72), H.dim, c)}`,
+    `  ${hc('┌' + '─'.repeat(boxWidth + 2) + '┐', H.dim, c)}`,
+    ...boxedPromptLines.map((line) => {
+      const padded = line.padEnd(boxWidth, ' ');
+
+      return `  ${hc(border, H.dim, c)} ${padded} ${hc(border, H.dim, c)}`;
+    }),
+    `  ${hc('└' + '─'.repeat(boxWidth + 2) + '┘', H.dim, c)}`,
     '',
   ];
 
