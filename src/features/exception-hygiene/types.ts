@@ -17,28 +17,28 @@ export type ExceptionHygieneFindingKind =
   | 'overscoped-try'
   | 'exception-control-flow';
 
-export type SourcePosition = {
+export interface SourcePosition {
   readonly line: number;
   readonly column: number;
-};
+}
 
-export type SourceSpan = {
+export interface SourceSpan {
   readonly start: SourcePosition;
   readonly end: SourcePosition;
-};
+}
 
-export type ExceptionHygieneFinding = {
+export interface ExceptionHygieneFinding {
   readonly kind: ExceptionHygieneFindingKind;
   readonly message: string;
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly evidence: string;
   readonly boundaryRole: BoundaryRole;
-  readonly recipes: readonly string[];
-};
+  readonly recipes: ReadonlyArray<string>;
+}
 
-export type ExceptionHygieneAnalysis = {
+export interface ExceptionHygieneAnalysis {
   readonly status: 'ok' | 'unavailable' | 'failed';
   readonly tool: 'oxc';
-  readonly findings: readonly ExceptionHygieneFinding[];
-};
+  readonly findings: ReadonlyArray<ExceptionHygieneFinding>;
+}

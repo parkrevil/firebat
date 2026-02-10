@@ -16,8 +16,13 @@ const LEVEL_RANK: Record<FirebatLogLevel, number> = {
 };
 
 const isTty = (): boolean => {
-  return Boolean((process as any)?.stderr?.isTTY);
+  return Boolean(process.stderr?.isTTY);
 };
+
+interface LevelStyle {
+  readonly emoji: string;
+  readonly color: string;
+}
 
 const ANSI = {
   reset: '\x1b[0m',
@@ -39,7 +44,7 @@ const c = (text: string, color: string, enabled: boolean): string => {
   return `${color}${text}${ANSI.reset}`;
 };
 
-const levelStyle = (level: FirebatLogLevel): { emoji: string; color: string } => {
+const levelStyle = (level: FirebatLogLevel): LevelStyle => {
   switch (level) {
     case 'error':
       return { emoji: '✖', color: ANSI.red };
@@ -51,6 +56,11 @@ const levelStyle = (level: FirebatLogLevel): { emoji: string; color: string } =>
       return { emoji: '◆', color: ANSI.magenta };
     case 'trace':
       return { emoji: '·', color: ANSI.gray };
+    default: {
+      const _exhaustive: never = level;
+
+      return { emoji: '·', color: ANSI.gray };
+    }
   }
 };
 

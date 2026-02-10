@@ -85,7 +85,7 @@ export const expandTargets = async (targets: ReadonlyArray<string>): Promise<str
     try {
       const stat = await Bun.file(abs).stat();
 
-      if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
+      if (stat.isDirectory()) {
         const files = await scanDirForSources(abs);
 
         expanded.push(...files);

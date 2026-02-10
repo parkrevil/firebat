@@ -94,7 +94,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
   }
 
   return ALL_DETECTORS.filter(detector => {
-    const value = (features as any)[detector];
+    const value = features?.[detector as keyof NonNullable<FirebatConfig['features']>];
 
     return value !== false;
   });
@@ -128,7 +128,7 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
 const resolveUnknownProofBoundaryGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = (features as any)?.['unknown-proof'];
+  const value = features?.['unknown-proof'];
 
   if (value === undefined || value === false) {
     return undefined;
@@ -140,9 +140,11 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   }
 
   if (typeof value === 'object' && value !== null) {
-    const boundaryGlobs = (value as any).boundaryGlobs;
+    const boundaryGlobs = value.boundaryGlobs;
 
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string') ? boundaryGlobs : undefined;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
+      ? boundaryGlobs
+      : undefined;
   }
 
   return undefined;
@@ -151,7 +153,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = (features as any)?.['barrel-policy'];
+  const value = features?.['barrel-policy'];
 
   if (value === undefined || value === false) {
     return undefined;
@@ -162,9 +164,11 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   }
 
   if (typeof value === 'object' && value !== null) {
-    const ignoreGlobs = (value as any).ignoreGlobs;
+    const ignoreGlobs = value.ignoreGlobs;
 
-    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
+    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
+      ? ignoreGlobs
+      : undefined;
   }
 
   return undefined;
@@ -184,10 +188,10 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
     return root;
   }
 
-  const out: any = { ...root };
+  const out: NonNullable<FirebatConfig['features']> = { ...(root ?? {}) };
 
   for (const detector of ALL_DETECTORS) {
-    const override = (overrides as any)[detector];
+    const override = overrides[detector as keyof typeof overrides];
 
     if (override === undefined || override === 'inherit') {
       continue;
@@ -204,9 +208,21 @@ const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
 };
 
+interface FirebatMcpServerOptions {
+  rootAbs: string;
+  config?: FirebatConfig | null;
+  logger: FirebatLogger;
+}
+
+interface DiffCounts {
+  newFindings: number;
+  resolvedFindings: number;
+  unchangedFindings: number;
+}
+
 /** Wrap a tool handler so that any thrown error becomes a proper MCP error response instead of an unhandled rejection. */
-const safeTool = <TArgs>(handler: (args: TArgs) => Promise<any>) => {
-  return async (args: TArgs): Promise<any> => {
+const safeTool = <TArgs>(handler: (args: TArgs) => Promise<unknown>) => {
+  return async (args: TArgs): Promise<unknown> => {
     try {
       return await handler(args);
     } catch (err: unknown) {
@@ -223,15 +239,11 @@ const safeTool = <TArgs>(handler: (args: TArgs) => Promise<any>) => {
   };
 };
 
-export const createFirebatMcpServer = async (options: {
-  rootAbs: string;
-  config?: FirebatConfig | null;
-  logger: FirebatLogger;
-}): Promise<McpServer> => {
+export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): Promise<McpServer> => {
   const rootAbs = options.rootAbs;
   const config = options.config ?? null;
   const logger = options.logger;
-  const server: any = new McpServer({
+  const server = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
   });
@@ -252,17 +264,14 @@ export const createFirebatMcpServer = async (options: {
     return path.isAbsolute(trimmed) ? trimmed : path.resolve(rootAbs, trimmed);
   };
 
-  const diffReports = (
-    prev: FirebatReport | null,
-    next: FirebatReport,
-  ): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
+  const diffReports = (prev: FirebatReport | null, next: FirebatReport): DiffCounts => {
     if (!prev) {
       return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };
     }
 
     const countFindings = (r: FirebatReport): number => {
       let total = 0;
-      const a = r.analyses as any;
+      const a = r.analyses as Record<string, unknown>;
 
       for (const key of Object.keys(a)) {
         const v = a[key];
@@ -270,20 +279,22 @@ export const createFirebatMcpServer = async (options: {
         if (Array.isArray(v)) {
           total += v.length;
         } else if (v && typeof v === 'object') {
-          if (Array.isArray(v.items)) {
-            total += v.items.length;
-          } else if (Array.isArray(v.findings)) {
-            total += v.findings.length;
-          } else if (Array.isArray(v.cloneClasses)) {
-            total += v.cloneClasses.length;
-          } else if (Array.isArray(v.groups)) {
-            total += v.groups.length;
-          } else if (Array.isArray(v.hotspots)) {
-            total += v.hotspots.length;
-          } else if (Array.isArray(v.diagnostics)) {
-            total += v.diagnostics.length;
-          } else if (Array.isArray(v.cycles)) {
-            total += v.cycles.length;
+          const record = v as Record<string, unknown>;
+
+          if (Array.isArray(record.items)) {
+            total += record.items.length;
+          } else if (Array.isArray(record.findings)) {
+            total += record.findings.length;
+          } else if (Array.isArray(record.cloneClasses)) {
+            total += record.cloneClasses.length;
+          } else if (Array.isArray(record.groups)) {
+            total += record.groups.length;
+          } else if (Array.isArray(record.hotspots)) {
+            total += record.hotspots.length;
+          } else if (Array.isArray(record.diagnostics)) {
+            total += record.diagnostics.length;
+          } else if (Array.isArray(record.cycles)) {
+            total += record.cycles.length;
           }
         }
       }
@@ -1312,7 +1323,7 @@ export const createFirebatMcpServer = async (options: {
       try {
         const stat = await Bun.file(fileAbs).stat();
 
-        isDir = typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory();
+        isDir = typeof stat.isDirectory === 'function' && stat.isDirectory();
       } catch {
         /* not found */
       }

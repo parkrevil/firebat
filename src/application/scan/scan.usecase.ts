@@ -37,8 +37,8 @@ import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { computeInputsDigest } from './inputs-digest';
-import { computeProjectInputsDigest } from './project-inputs-digest';
 import { shouldIncludeNoopEmptyCatch } from './noop-gating';
+import { computeProjectInputsDigest } from './project-inputs-digest';
 
 const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -177,8 +177,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   logger.debug(`Fix mode: format=${shouldRunFormat} lint=${shouldRunLint}`);
 
-  let formatPromise: Promise<ReturnType<typeof createEmptyFormat>> | Promise<any> | null = null;
-  let lintPromise: Promise<ReturnType<typeof createEmptyLint>> | Promise<any> | null = null;
+  type FormatResult = ReturnType<typeof createEmptyFormat>;
+  type LintResult = ReturnType<typeof createEmptyLint>;
+  type BarrelPolicyResult = ReturnType<typeof createEmptyBarrelPolicy>;
+  type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
+  type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
+
+  let formatPromise: Promise<FormatResult> | null = null;
+  let lintPromise: Promise<LintResult> | null = null;
   const fixTimings: Record<string, number> = {};
 
   if (options.fix) {
@@ -306,7 +312,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   }
 
   const barrelPolicyPromise = options.detectors.includes('barrel-policy')
-    ? ((): Promise<any> => {
+    ? ((): Promise<BarrelPolicyResult> => {
         const t0 = nowMs();
 
         return analyzeBarrelPolicy(program, {
@@ -322,7 +328,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
       })()
     : Promise.resolve(createEmptyBarrelPolicy());
   const unknownProofPromise = options.detectors.includes('unknown-proof')
-    ? ((): Promise<any> => {
+    ? ((): Promise<UnknownProofResult> => {
         const t0 = nowMs();
 
         return analyzeUnknownProof(program, {
@@ -339,7 +345,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
       })()
     : Promise.resolve(createEmptyUnknownProof());
   const typecheckPromise = options.detectors.includes('typecheck')
-    ? ((): Promise<any> => {
+    ? ((): Promise<TypecheckResult> => {
         const t0 = nowMs();
 
         return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger }).then(r => {
@@ -434,7 +440,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
     exceptionHygieneSelected: options.detectors.includes('exception-hygiene'),
     exceptionHygieneStatus: exceptionHygiene.status,
   });
-
   let noop: ReturnType<typeof analyzeNoop>;
 
   if (options.detectors.includes('noop')) {
@@ -448,6 +453,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
         findings: noop.findings.filter(f => f.kind !== 'empty-catch'),
       };
     }
+
     detectorTimings.noop = nowMs() - t0;
 
     logger.debug('noop', { durationMs: detectorTimings.noop });

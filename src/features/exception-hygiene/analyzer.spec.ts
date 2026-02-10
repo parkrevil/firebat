@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/parse-source';
-
 import { analyzeExceptionHygiene } from './analyzer';
 
 const analyzeSingle = (filePath: string, sourceText: string) => {
@@ -57,7 +56,6 @@ describe('exception-hygiene/analyzer', () => {
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
 
@@ -70,16 +68,9 @@ describe('exception-hygiene/analyzer', () => {
   it('should report useless-catch when catch rethrows the same error', () => {
     // Arrange
     const filePath = '/virtual/src/features/useless.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (e) {',
-      '    throw e;',
-      '  }',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  try {', '    return 1;', '  } catch (e) {', '    throw e;', '  }', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
@@ -91,16 +82,9 @@ describe('exception-hygiene/analyzer', () => {
   it('should report useless-catch when catch rethrows the same error with a different name', () => {
     // Arrange
     const filePath = '/virtual/src/features/useless-rename.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (err) {',
-      '    throw err;',
-      '  }',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
@@ -122,7 +106,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
@@ -143,7 +126,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
@@ -164,7 +146,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
@@ -185,7 +166,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
@@ -206,7 +186,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
@@ -229,7 +208,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
@@ -252,7 +230,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
@@ -264,14 +241,9 @@ describe('exception-hygiene/analyzer', () => {
   it('should report return-in-finally when finally callback returns a value', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => {',
-      '    return 2;',
-      '  });',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
@@ -283,12 +255,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should report return-in-finally when finally callback has expression body', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-expr.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => 1);',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
@@ -307,7 +274,6 @@ describe('exception-hygiene/analyzer', () => {
       '  });',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
@@ -326,7 +292,6 @@ describe('exception-hygiene/analyzer', () => {
       '  });',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
@@ -344,7 +309,6 @@ describe('exception-hygiene/analyzer', () => {
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
@@ -362,7 +326,6 @@ describe('exception-hygiene/analyzer', () => {
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
@@ -380,7 +343,6 @@ describe('exception-hygiene/analyzer', () => {
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
@@ -398,7 +360,6 @@ describe('exception-hygiene/analyzer', () => {
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
@@ -410,12 +371,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should report prefer-catch when then handles rejection with a second argument', () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-catch.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).then(() => 1, () => 0);',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
@@ -434,7 +390,6 @@ describe('exception-hygiene/analyzer', () => {
       '    .catch(() => -1);',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
@@ -446,12 +401,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should not report prefer-catch when catch is used', () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-catch-ok.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).then(() => 1).catch(() => 0);',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
@@ -475,7 +425,6 @@ describe('exception-hygiene/analyzer', () => {
       '    });',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
@@ -497,7 +446,6 @@ describe('exception-hygiene/analyzer', () => {
       '    });',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
@@ -509,12 +457,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should not report prefer-await-to-then when then is a short value mapping', () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-ok.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).then(x => x + 1);',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
@@ -526,14 +469,9 @@ describe('exception-hygiene/analyzer', () => {
   it('should not report prefer-await-to-then when chain is short even if callback uses block', () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-short-block.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).then(x => {',
-      '    return x + 1;',
-      '  });',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  return Promise.resolve(1).then(x => {', '    return x + 1;', '  });', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
@@ -545,12 +483,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should not over-report unrelated kinds when only one rule is violated', () => {
     // Arrange
     const filePath = '/virtual/src/features/single-violation.ts';
-    const source = [
-      'export function f() {',
-      '  Promise.resolve(1).then(() => 1, () => 0);',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
 
@@ -563,15 +496,7 @@ describe('exception-hygiene/analyzer', () => {
   it('should report silent-catch when catch is empty', () => {
     // Arrange
     const filePath = '/virtual/src/features/silent-empty.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } catch (e) {',
-      '  }',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  try {', '    throw new Error("x");', '  } catch (e) {', '  }', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
@@ -592,7 +517,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
@@ -613,7 +537,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
@@ -634,7 +557,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
@@ -655,7 +577,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
@@ -676,7 +597,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
@@ -701,7 +621,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'redundant-nested-catch');
@@ -722,7 +641,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'redundant-nested-catch');
@@ -753,7 +671,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'overscoped-try');
@@ -765,16 +682,9 @@ describe('exception-hygiene/analyzer', () => {
   it('should not report overscoped-try when try block is small', () => {
     // Arrange
     const filePath = '/virtual/src/features/overscoped-ok.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (err) {',
-      '    throw err;',
-      '  }',
-      '}',
-    ].join('\n');
-
+    const source = ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'overscoped-try');
@@ -795,7 +705,6 @@ describe('exception-hygiene/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const analysis = analyzeSingle(filePath, source);
     const hits = analysis.findings.filter(f => f.kind === 'exception-control-flow');

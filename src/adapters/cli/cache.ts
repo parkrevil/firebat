@@ -5,7 +5,7 @@ import type { FirebatLogger } from '../../ports/logger';
 
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 
-const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+const isTty = (): boolean => Boolean(process.stdout?.isTTY);
 
 const H = {
   reset: '\x1b[0m',

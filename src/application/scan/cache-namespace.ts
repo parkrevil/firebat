@@ -24,7 +24,11 @@ const computeBuildId = async (): Promise<string> => {
   }
 };
 
-const computeCacheNamespace = async (input: { toolVersion: string }): Promise<string> => {
+interface CacheNamespaceInput {
+  readonly toolVersion: string;
+}
+
+const computeCacheNamespace = async (input: CacheNamespaceInput): Promise<string> => {
   const buildId = await computeBuildId();
 
   return hashString(

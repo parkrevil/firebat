@@ -10,18 +10,50 @@ interface AstGrepMatch {
   readonly ruleId: string;
 }
 
-const toSpan = (range: { start: { line: number; column: number }; end: { line: number; column: number } }): SourceSpan => {
+interface AstGrepPosition {
+  readonly line: number;
+  readonly column: number;
+}
+
+interface AstGrepRange {
+  readonly start: AstGrepPosition;
+  readonly end: AstGrepPosition;
+}
+
+interface AstGrepNode {
+  text: () => string;
+  range: () => AstGrepRange;
+}
+
+interface AstGrepRoot {
+  findAll?: (matcher: unknown) => ReadonlyArray<AstGrepNode>;
+  find?: (matcher: unknown) => AstGrepNode | null;
+}
+
+interface MatcherInput {
+  rule?: unknown;
+  matcher?: unknown;
+  ruleName?: string;
+}
+
+interface MatcherResult {
+  ruleId: string;
+  matcher: unknown;
+}
+
+interface FindPatternInput extends MatcherInput {
+  targets: ReadonlyArray<string>;
+  logger: FirebatLogger;
+}
+
+const toSpan = (range: AstGrepRange): SourceSpan => {
   return {
     start: { line: range.start.line + 1, column: range.start.column + 1 },
     end: { line: range.end.line + 1, column: range.end.column + 1 },
   };
 };
 
-const resolveMatcher = (input: {
-  rule?: unknown;
-  matcher?: unknown;
-  ruleName?: string;
-}): { ruleId: string; matcher: unknown } => {
+const resolveMatcher = (input: MatcherInput): MatcherResult => {
   if (input.matcher !== undefined) {
     return { ruleId: input.ruleName ?? 'inline', matcher: input.matcher };
   }
@@ -33,13 +65,7 @@ const resolveMatcher = (input: {
   throw new Error('Either matcher or rule must be provided.');
 };
 
-const findPatternInFiles = async (input: {
-  targets: ReadonlyArray<string>;
-  rule?: unknown;
-  matcher?: unknown;
-  ruleName?: string;
-  logger: FirebatLogger;
-}): Promise<ReadonlyArray<AstGrepMatch>> => {
+const findPatternInFiles = async (input: FindPatternInput): Promise<ReadonlyArray<AstGrepMatch>> => {
   const { ruleId, matcher } = resolveMatcher(input);
   const results: AstGrepMatch[] = [];
 
@@ -48,24 +74,13 @@ const findPatternInFiles = async (input: {
   for (const filePath of input.targets) {
     const code = await Bun.file(filePath).text();
     const sg = ts.parse(code);
-    const root = sg.root() as unknown as {
-      findAll?: (matcher: unknown) => ReadonlyArray<{ text: () => string; range: () => any }>;
-      find?: (matcher: unknown) => { text: () => string; range: () => any } | null;
-    };
-    const nodes =
-      typeof root.findAll === 'function'
-        ? root.findAll(matcher)
-        : typeof root.find === 'function'
-          ? root.find(matcher)
-            ? [root.find(matcher)!]
-            : []
-          : [];
+    const root = sg.root() as AstGrepRoot;
+    const allMatches = typeof root.findAll === 'function' ? root.findAll(matcher) : [];
+    const firstMatch = typeof root.find === 'function' ? root.find(matcher) : null;
+    const nodes = allMatches.length > 0 ? allMatches : firstMatch ? [firstMatch] : [];
 
     for (const node of nodes) {
-      const range = node.range() as {
-        start: { line: number; column: number };
-        end: { line: number; column: number };
-      };
+      const range = node.range();
 
       results.push({
         filePath,

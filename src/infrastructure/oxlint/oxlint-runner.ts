@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import * as z from 'zod';
 
 import type { FirebatLogger } from '../../ports/logger';

@@ -7,7 +7,6 @@ describe('integration/exception-hygiene', () => {
   it('should return no findings when input is empty', () => {
     // Arrange
     let sources = new Map<string, string>();
-
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeExceptionHygiene(program);
@@ -20,11 +19,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating.ts';
-    let source = [
-      'export function f() {',
-      '  Promise.resolve(1);',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  Promise.resolve(1);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -41,11 +36,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-reject.ts';
-    let source = [
-      'export function f() {',
-      '  Promise.reject(new Error("x"));',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  Promise.reject(new Error("x"));', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -62,11 +53,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-all.ts';
-    let source = [
-      'export function f() {',
-      '  Promise.all([Promise.resolve(1)]);',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  Promise.all([Promise.resolve(1)]);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -83,11 +70,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-new-promise.ts';
-    let source = [
-      'export function f() {',
-      '  new Promise(resolve => resolve(1));',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  new Promise(resolve => resolve(1));', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -104,11 +87,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-ok.ts';
-    let source = [
-      'export function f() {',
-      '  void Promise.resolve(1);',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  void Promise.resolve(1);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -125,11 +104,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-returned.ts';
-    let source = [
-      'export function f() {',
-      '  return Promise.resolve(1);',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  return Promise.resolve(1);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -146,11 +121,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-awaited.ts';
-    let source = [
-      'export async function f() {',
-      '  await Promise.resolve(1);',
-      '}',
-    ].join('\n');
+    let source = ['export async function f() {', '  await Promise.resolve(1);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -167,11 +138,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-caught.ts';
-    let source = [
-      'export function f() {',
-      '  Promise.resolve(1).catch(() => 0);',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  Promise.resolve(1).catch(() => 0);', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -296,13 +263,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-sync.ts';
-    let source = [
-      'export function f() {',
-      '  [1, 2, 3].forEach(value => {',
-      '    console.log(value);',
-      '  });',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  [1, 2, 3].forEach(value => {', '    console.log(value);', '  });', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -319,15 +280,9 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-await.ts';
-    let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
-      'export async function f() {',
-      '  return await g();',
-      '}',
-    ].join('\n');
+    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
+      '\n',
+    );
 
     sources.set(filePath, source);
 
@@ -344,15 +299,9 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/adapters/cli/entry.ts';
-    let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
-      'export async function f() {',
-      '  return await g();',
-      '}',
-    ].join('\n');
+    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
+      '\n',
+    );
 
     sources.set(filePath, source);
 
@@ -369,15 +318,9 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/adapters/mcp/server.ts';
-    let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
-      'export async function f() {',
-      '  return await g();',
-      '}',
-    ].join('\n');
+    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
+      '\n',
+    );
 
     sources.set(filePath, source);
 
@@ -394,15 +337,9 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/infrastructure/tsgo/tsgo-runner.ts';
-    let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
-      'export async function f() {',
-      '  return await g();',
-      '}',
-    ].join('\n');
+    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
+      '\n',
+    );
 
     sources.set(filePath, source);
 
@@ -477,14 +414,7 @@ describe('integration/exception-hygiene', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/silent-empty.ts';
-    let source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } catch (e) {',
-      '  }',
-      '}',
-    ].join('\n');
+    let source = ['export function f() {', '  try {', '    throw new Error("x");', '  } catch (e) {', '  }', '}'].join('\n');
 
     sources.set(filePath, source);
 

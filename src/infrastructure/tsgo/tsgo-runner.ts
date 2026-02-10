@@ -19,9 +19,11 @@ interface TsgoTraceResult {
   readonly structured?: unknown;
 }
 
+type SourcePosition = { readonly line: number; readonly column: number };
+
 type SourceSpan = {
-  readonly start: { readonly line: number; readonly column: number };
-  readonly end: { readonly line: number; readonly column: number };
+  readonly start: SourcePosition;
+  readonly end: SourcePosition;
 };
 
 type TraceNode = {
@@ -63,6 +65,20 @@ type LspLocationLink = {
   readonly originSelectionRange?: LspRange;
 };
 
+type LspRequestPayload = { id: string | number; method: string; params: unknown };
+
+type StdinWriter = { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
+
+type LspErrorPayload = { message?: string };
+
+type LspInboundMessage = { id?: unknown; error?: LspErrorPayload; result?: unknown };
+
+type LspConnectionStartOptions = { cwd: string; command: string; args: string[] };
+
+type LspSessionInput = { root: string; tsconfigPath?: string; logger: FirebatLogger };
+
+type OpenTsDocumentInput = { lsp: LspConnection; filePath: string; languageId?: string; version?: number; text?: string };
+
 type TsgoLspSession = {
   readonly lsp: LspConnection;
   readonly cwd: string;
@@ -84,7 +100,9 @@ type SharedTsgoSessionEntry = {
 const sharedTsgoSessions = new Map<string, SharedTsgoSessionEntry>();
 const DEFAULT_SHARED_IDLE_MS = 5_000;
 
-const makeSharedKey = (input: { cwd: string; command: string; args: string[] }): string => {
+type SharedKeyInput = { cwd: string; command: string; args: string[] };
+
+const makeSharedKey = (input: SharedKeyInput): string => {
   return `${input.command}\n${input.args.join('\u0000')}\n${input.cwd}`;
 };
 
@@ -121,10 +139,11 @@ const scheduleSharedIdleClose = (entry: SharedTsgoSessionEntry): void => {
   }, DEFAULT_SHARED_IDLE_MS);
 };
 
-const acquireSharedTsgoSession = async (input: {
-  root: string;
-  tsconfigPath?: string;
-}): Promise<{ ok: true; entry: SharedTsgoSessionEntry } | { ok: false; error: string }> => {
+type SharedTsgoSessionInput = { root: string; tsconfigPath?: string };
+
+type SharedTsgoSessionResult = { ok: true; entry: SharedTsgoSessionEntry } | { ok: false; error: string };
+
+const acquireSharedTsgoSession = async (input: SharedTsgoSessionInput): Promise<SharedTsgoSessionResult> => {
   const cwd = input.tsconfigPath
     ? path.dirname(path.resolve(process.cwd(), input.tsconfigPath))
     : path.isAbsolute(input.root)
@@ -250,7 +269,7 @@ const readFileText = async (filePath: string): Promise<string> => {
 
 const splitLines = (text: string): string[] => text.split(/\r?\n/);
 
-const findSymbolPositionInText = (text: string, symbol: string): { line: number; character: number } | null => {
+const findSymbolPositionInText = (text: string, symbol: string): LspPosition | null => {
   const lines = splitLines(text);
   const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const candidates: Array<{ score: number; line: number; character: number }> = [];
@@ -271,7 +290,13 @@ const findSymbolPositionInText = (text: string, symbol: string): { line: number;
     }
 
     for (let p = 0; p < declPatterns.length; p++) {
-      const m = declPatterns[p]!.exec(lineText);
+      const pattern = declPatterns[p];
+
+      if (!pattern) {
+        continue;
+      }
+
+      const m = pattern.exec(lineText);
 
       if (m && m.index >= 0) {
         const idx = lineText.indexOf(symbol, m.index);
@@ -296,7 +321,13 @@ const findSymbolPositionInText = (text: string, symbol: string): { line: number;
 
   candidates.sort((a, b) => b.score - a.score || a.line - b.line || a.character - b.character);
 
-  return { line: candidates[0]!.line, character: candidates[0]!.character };
+  const best = candidates[0];
+
+  if (!best) {
+    return null;
+  }
+
+  return { line: best.line, character: best.character };
 };
 
 const toSpanFromRange = (range: LspRange): SourceSpan => {
@@ -329,7 +360,7 @@ const buildLspMessage = (payload: unknown): Uint8Array => {
 
 class LspConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
-  private readonly stdin: { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
+  private readonly stdin: StdinWriter;
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private readonly notificationHandlers = new Map<string, Set<(params: unknown) => void>>();
@@ -350,8 +381,20 @@ class LspConnection {
       throw new Error('tsgo stdin does not support write()');
     }
 
-    this.stdin = stdin as { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
+    this.stdin = stdin as StdinWriter;
     this.readerLoop = this.startReadLoop();
+  }
+
+  static async start(opts: LspConnectionStartOptions): Promise<LspConnection> {
+    const proc = Bun.spawn({
+      cmd: [opts.command, ...opts.args],
+      cwd: opts.cwd,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'pipe',
+    });
+
+    return new LspConnection(proc);
   }
 
   private writeToStdin(payload: Uint8Array): void {
@@ -366,7 +409,7 @@ class LspConnection {
     }
   }
 
-  private respondToServerRequest(input: { id: string | number; method: string; params: unknown }): void {
+  private respondToServerRequest(input: LspRequestPayload): void {
     const { id, method, params } = input;
 
     const ok = (result: unknown): void => {
@@ -439,18 +482,6 @@ class LspConnection {
     }
   }
 
-  static async start(opts: { cwd: string; command: string; args: string[] }): Promise<LspConnection> {
-    const proc = Bun.spawn({
-      cmd: [opts.command, ...opts.args],
-      cwd: opts.cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      stdin: 'pipe',
-    });
-
-    return new LspConnection(proc);
-  }
-
   private async startReadLoop(): Promise<void> {
     if (!this.proc.stdout || typeof this.proc.stdout === 'number') {
       throw new Error('tsgo stdout is not available');
@@ -521,7 +552,7 @@ class LspConnection {
             this.respondToServerRequest({ id, method, params });
           }
         } else if (msg && typeof msg === 'object' && 'id' in msg) {
-          const json = msg as { id?: unknown; error?: { message?: string }; result?: unknown };
+          const json = msg as LspInboundMessage;
           const id = Number(json.id);
           const pending = this.pending.get(id);
 
@@ -892,7 +923,7 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
       const defLocations = normalizeLocations(definitionResult);
 
       if (defLocations.length > 0) {
-        const def = defLocations[0]!;
+        const def = defLocations[0];
         const defPath = fileUrlToPathSafe(def.uri);
         const defSpan = toSpanFromRange(def.range);
         const defNodeId = `ref:def:${defPath}:${def.range.start.line}:${def.range.start.character}`;
@@ -957,7 +988,7 @@ export type { TsgoTraceRequest, TsgoTraceResult };
 export type { LspPosition, LspRange, LspLocation, LspLocationLink, TsgoLspSession };
 
 export const withTsgoLspSession = async <T>(
-  input: { root: string; tsconfigPath?: string; logger: FirebatLogger },
+  input: LspSessionInput,
   fn: (session: TsgoLspSession) => Promise<T>,
 ): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string }> => {
   try {
@@ -991,13 +1022,7 @@ export const withTsgoLspSession = async <T>(
   }
 };
 
-export const openTsDocument = async (input: {
-  lsp: LspConnection;
-  filePath: string;
-  languageId?: string;
-  version?: number;
-  text?: string;
-}): Promise<{ uri: string; text: string }> => {
+export const openTsDocument = async (input: OpenTsDocumentInput): Promise<{ uri: string; text: string }> => {
   const text = input.text ?? (await readFileText(input.filePath));
   const uri = pathToFileURL(input.filePath).toString();
 

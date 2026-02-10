@@ -1,29 +1,90 @@
-type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
+interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
 
-type Edit = { readonly start: number; readonly end: number; readonly text: string };
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
-type NodeBase = { readonly start: number; readonly end: number };
+interface Edit {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
 
-type ValueNode =
-  | (NodeBase & {
-      readonly kind: 'object';
-      readonly openBrace: number;
-      readonly closeBrace: number;
-      readonly props: readonly PropNode[];
-    })
-  | (NodeBase & { readonly kind: 'array' })
-  | (NodeBase & { readonly kind: 'string' })
-  | (NodeBase & { readonly kind: 'number' })
-  | (NodeBase & { readonly kind: 'literal' });
+interface NodeBase {
+  readonly start: number;
+  readonly end: number;
+}
 
-type PropNode = {
+interface ObjectNode extends NodeBase {
+  readonly kind: 'object';
+  readonly openBrace: number;
+  readonly closeBrace: number;
+  readonly props: readonly PropNode[];
+}
+
+interface ArrayNode extends NodeBase {
+  readonly kind: 'array';
+}
+
+interface StringNode extends NodeBase {
+  readonly kind: 'string';
+}
+
+interface NumberNode extends NodeBase {
+  readonly kind: 'number';
+}
+
+interface LiteralNode extends NodeBase {
+  readonly kind: 'literal';
+}
+
+type ValueNode = ObjectNode | ArrayNode | StringNode | NumberNode | LiteralNode;
+
+interface PropNode {
   readonly key: string;
   readonly keyStart: number;
   readonly keyEnd: number;
   readonly value: ValueNode;
   readonly start: number; // keyStart
   readonly end: number; // value.end
-};
+}
+
+interface TokenRange {
+  readonly value: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+interface RenderInsertedPropertyInput {
+  readonly key: string;
+  readonly value: JsonValue;
+  readonly indent: string;
+  readonly newline: string;
+}
+
+interface CollectEditsInput {
+  readonly userText: string;
+  readonly userNode: Extract<ValueNode, { kind: 'object' }>;
+  readonly templateValue: JsonValue;
+}
+
+interface SyncInput {
+  readonly userText: string;
+  readonly templateJson: JsonValue;
+}
+
+interface SyncSuccess {
+  readonly ok: true;
+  readonly text: string;
+  readonly changed: boolean;
+}
+
+interface SyncFailure {
+  readonly ok: false;
+  readonly error: string;
+}
+
+type SyncResult = SyncSuccess | SyncFailure;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -117,7 +178,7 @@ class Scanner {
     }
   }
 
-  public parseString(): { value: string; start: number; end: number } {
+  public parseString(): TokenRange {
     const start = this.i;
     const quote = this.next();
 
@@ -160,7 +221,7 @@ class Scanner {
     throw this.error('Unterminated string');
   }
 
-  public parseIdentifier(): { value: string; start: number; end: number } {
+  public parseIdentifier(): TokenRange {
     const start = this.i;
     const first = this.peek();
 
@@ -293,7 +354,7 @@ class Scanner {
         return { kind: 'object', start, end: this.i, openBrace, closeBrace, props };
       }
 
-      let keyTok: { value: string; start: number; end: number };
+      let keyTok: TokenRange;
 
       if (ch === '"' || ch === "'") {
         keyTok = this.parseString();
@@ -408,12 +469,7 @@ const applyEditsDescending = (text: string, edits: readonly Edit[]): string => {
   return out;
 };
 
-const renderInsertedProperty = (input: {
-  readonly key: string;
-  readonly value: JsonValue;
-  readonly indent: string;
-  readonly newline: string;
-}): string => {
+const renderInsertedProperty = (input: RenderInsertedPropertyInput): string => {
   // Render via a wrapper object to get stable formatting, then strip braces.
   const wrapper = JSON.stringify({ [input.key]: input.value }, null, 2);
   const lines = wrapper.split('\n');
@@ -426,16 +482,14 @@ const renderInsertedProperty = (input: {
   return adjusted.join(input.newline);
 };
 
-const collectEditsForObjectSync = (input: {
-  readonly userText: string;
-  readonly userNode: Extract<ValueNode, { kind: 'object' }>;
-  readonly templateValue: JsonValue;
-}): Edit[] => {
+const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
   const { userText, userNode, templateValue } = input;
 
   if (!isPlainObject(templateValue)) {
     return [];
   }
+
+  const templateObject = templateValue as JsonObject;
 
   const newline = detectNewline(userText);
   const templateKeys = Object.keys(templateValue);
@@ -473,7 +527,7 @@ const collectEditsForObjectSync = (input: {
       const blockLines: string[] = [];
 
       for (const k of missingKeys) {
-        const v = (templateValue as any)[k] as JsonValue;
+        const v = templateObject[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
 
         blockLines.push(rendered + ',');
@@ -491,7 +545,7 @@ const collectEditsForObjectSync = (input: {
       const blockLines: string[] = [];
 
       for (const k of missingKeys) {
-        const v = (templateValue as any)[k] as JsonValue;
+        const v = templateObject[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
 
         blockLines.push(rendered + ',');
@@ -512,7 +566,7 @@ const collectEditsForObjectSync = (input: {
       continue;
     }
 
-    const tplChild = (templateValue as any)[k] as JsonValue;
+    const tplChild = templateObject[k] as JsonValue;
 
     if (!isPlainObject(tplChild)) {
       continue;
@@ -534,10 +588,7 @@ const collectEditsForObjectSync = (input: {
   return [...nestedEdits, ...deletions, ...insertions];
 };
 
-export const syncJsoncTextToTemplateKeys = (input: {
-  readonly userText: string;
-  readonly templateJson: JsonValue;
-}): { ok: true; text: string; changed: boolean } | { ok: false; error: string } => {
+export const syncJsoncTextToTemplateKeys = (input: SyncInput): SyncResult => {
   try {
     const root = parseRootObjectOrThrow(input.userText);
     const edits = collectEditsForObjectSync({

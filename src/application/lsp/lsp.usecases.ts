@@ -8,108 +8,316 @@ import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../infr
 
 type LineParam = number | string;
 
-type LspPosition = { line: number; character: number };
+interface LspPosition {
+  line: number;
+  character: number;
+}
 
-type LspRange = { start: LspPosition; end: LspPosition };
+interface LspRange {
+  start: LspPosition;
+  end: LspPosition;
+}
 
-type LspTextEdit = { range: LspRange; newText: string };
+interface LspTextEdit {
+  range: LspRange;
+  newText: string;
+}
 
-type WorkspaceEdit = {
+interface WorkspaceEdit {
   changes?: Record<string, LspTextEdit[]>;
   documentChanges?: unknown;
-};
+}
 
-type LspLocation = { uri: string; range: LspRange };
+interface LspLocation {
+  uri: string;
+  range: LspRange;
+}
 
-type LspReference = { filePath: string; range: LspRange; snippet?: string };
+interface LspReference {
+  filePath: string;
+  range: LspRange;
+  snippet?: string;
+}
 
-type LspDefinition = { filePath: string; range: LspRange; preview?: string };
+interface LspDefinition {
+  filePath: string;
+  range: LspRange;
+  preview?: string;
+}
 
-type ParsedImport = { kind: string; specifier: string; raw: string; resolvedPath?: string | null };
+interface ParsedImport {
+  kind: string;
+  specifier: string;
+  raw: string;
+  resolvedPath?: string | null;
+}
 
-type TypedDependency = { name: string; version: string; hasTypes: boolean };
+interface TypedDependency {
+  name: string;
+  version: string;
+  hasTypes: boolean;
+}
 
-type ExternalLibrarySymbol = { library: string; symbolName: string; kind: string; filePath: string; line: number };
+interface ExternalLibrarySymbol {
+  library: string;
+  symbolName: string;
+  kind: string;
+  filePath: string;
+  line: number;
+}
 
 type LspClient = TsgoLspSession['lsp'];
 
-type BaseInput = { root: string; logger: FirebatLogger; tsconfigPath?: string };
+interface BaseInput {
+  root: string;
+  logger: FirebatLogger;
+  tsconfigPath?: string;
+}
 
-type FileInput = BaseInput & { filePath: string };
+interface FilePathInput {
+  filePath: string;
+}
 
-type HoverInput = FileInput & { line: LineParam; character?: number; target?: string };
+interface LineInput {
+  line: LineParam;
+}
 
-type SymbolAtLineInput = FileInput & { line: LineParam; symbolName: string };
+interface CharacterInput {
+  character?: number;
+}
 
-type DiagnosticsInput = FileInput & { timeoutMs?: number; forceRefresh?: boolean };
+interface TargetInput {
+  target?: string;
+}
 
-type CompletionInput = FileInput & { line: LineParam; character?: number };
+interface SymbolNameInput {
+  symbolName: string;
+}
 
-type SignatureHelpInput = FileInput & { line: LineParam; character?: number };
+interface DiagnosticsOptions {
+  timeoutMs?: number;
+  forceRefresh?: boolean;
+}
 
-type CodeActionsInput = FileInput & { startLine: LineParam; endLine?: LineParam; includeKinds?: ReadonlyArray<string> };
+interface CodeActionsOptions {
+  startLine: LineParam;
+  endLine?: LineParam;
+  includeKinds?: ReadonlyArray<string>;
+}
 
-type RenameInput = FileInput & { line?: LineParam; symbolName: string; newName: string };
+interface RenameOptions {
+  line?: LineParam;
+  symbolName: string;
+  newName: string;
+}
 
-type DeleteInput = FileInput & { line: LineParam; symbolName: string };
+interface DeleteOptions {
+  line: LineParam;
+  symbolName: string;
+}
+
+interface WorkspaceQueryInput {
+  query?: string;
+}
+
+type FileInput = BaseInput & FilePathInput;
+
+type HoverInput = FileInput & LineInput & CharacterInput & TargetInput;
+
+type SymbolAtLineInput = FileInput & LineInput & SymbolNameInput;
+
+type DiagnosticsInput = FileInput & DiagnosticsOptions;
+
+type CompletionInput = FileInput & LineInput & CharacterInput;
+
+type SignatureHelpInput = FileInput & LineInput & CharacterInput;
+
+type CodeActionsInput = FileInput & CodeActionsOptions;
+
+type RenameInput = FileInput & RenameOptions;
+
+type DeleteInput = FileInput & DeleteOptions;
 
 type RootInput = BaseInput;
 
-type ExternalSymbolsInput = { root: string; filePath: string };
+interface ExternalSymbolsInput {
+  root: string;
+  filePath: string;
+}
 
-type ParseImportsInput = { root: string; filePath: string };
+interface ParseImportsInput {
+  root: string;
+  filePath: string;
+}
 
-type TypeDepsInput = { root: string; logger: FirebatLogger };
+interface TypeDepsInput {
+  root: string;
+  logger: FirebatLogger;
+}
 
-type ExternalIndexInput = {
+interface ExternalIndexInput {
   root: string;
   maxFiles?: number;
   includePatterns?: ReadonlyArray<string>;
   excludePatterns?: ReadonlyArray<string>;
   logger: FirebatLogger;
-};
+}
 
-type ExternalSearchInput = { root: string; libraryName?: string; symbolName?: string; kind?: string; limit?: number };
+interface ExternalSearchInput {
+  root: string;
+  libraryName?: string;
+  symbolName?: string;
+  kind?: string;
+  limit?: number;
+}
 
-type ResultWithError<T extends Record<string, unknown>> = T & { ok: boolean; error?: string };
+interface ResultStatus {
+  ok: boolean;
+  error?: string;
+}
 
-type OpenDocumentInput = { lsp: LspClient; fileAbs: string; languageId?: string };
+type ResultWithError<T extends Record<string, unknown>> = T & ResultStatus;
 
-type OpenedDocument = { uri: string; text: string; lines: string[] };
+interface OpenDocumentInput {
+  lsp: LspClient;
+  fileAbs: string;
+  languageId?: string;
+}
 
-type HoverResult = ResultWithError<{ hover?: unknown; note?: string }>;
+interface OpenedDocument {
+  uri: string;
+  text: string;
+  lines: string[];
+}
 
-type ReferencesResult = ResultWithError<{ references?: LspReference[] }>;
+interface HoverPayload {
+  hover?: unknown;
+  note?: string;
+}
 
-type DefinitionsResult = ResultWithError<{ definitions?: LspDefinition[] }>;
+interface ReferencesPayload {
+  references?: LspReference[];
+}
 
-type DiagnosticsResult = ResultWithError<{ diagnostics?: unknown }>;
+interface DefinitionsPayload {
+  definitions?: LspDefinition[];
+}
 
-type SymbolsResult = ResultWithError<{ symbols?: unknown }>;
+interface DiagnosticsPayload {
+  diagnostics?: unknown;
+}
 
-type CompletionResult = ResultWithError<{ completion?: unknown }>;
+interface SymbolsPayload {
+  symbols?: unknown;
+}
 
-type SignatureHelpResult = ResultWithError<{ signatureHelp?: unknown }>;
+interface CompletionPayload {
+  completion?: unknown;
+}
 
-type FormatResult = ResultWithError<{ changed?: boolean }>;
+interface SignatureHelpPayload {
+  signatureHelp?: unknown;
+}
 
-type CodeActionsResult = ResultWithError<{ actions?: unknown }>;
+interface FormatPayload {
+  changed?: boolean;
+}
 
-type RenameResult = ResultWithError<{ changedFiles?: string[] }>;
+interface CodeActionsPayload {
+  actions?: unknown;
+}
 
-type DeleteResult = ResultWithError<{ changed?: boolean }>;
+interface RenamePayload {
+  changedFiles?: string[];
+}
 
-type CapabilitiesResult = ResultWithError<{ capabilities?: unknown; note?: string }>;
+interface DeletePayload {
+  changed?: boolean;
+}
 
-type ExternalSymbolsResult = ResultWithError<{ symbols: string[] }>;
+interface CapabilitiesPayload {
+  capabilities?: unknown;
+  note?: string;
+}
 
-type ParseImportsResult = ResultWithError<{ imports?: ParsedImport[] }>;
+interface ExternalSymbolsPayload {
+  symbols: string[];
+}
 
-type TypeDepsResult = ResultWithError<{ dependencies?: TypedDependency[] }>;
+interface ParseImportsPayload {
+  imports?: ParsedImport[];
+}
 
-type ExternalIndexResult = ResultWithError<{ indexedFiles: number; symbols: number }>;
+interface TypeDepsPayload {
+  dependencies?: TypedDependency[];
+}
 
-type ExternalSearchResult = ResultWithError<{ matches?: ExternalLibrarySymbol[] }>;
+interface ExternalIndexPayload {
+  indexedFiles: number;
+  symbols: number;
+}
+
+interface ExternalSearchPayload {
+  matches?: ExternalLibrarySymbol[];
+}
+
+type HoverResult = ResultWithError<HoverPayload>;
+
+type ReferencesResult = ResultWithError<ReferencesPayload>;
+
+type DefinitionsResult = ResultWithError<DefinitionsPayload>;
+
+type DiagnosticsResult = ResultWithError<DiagnosticsPayload>;
+
+type SymbolsResult = ResultWithError<SymbolsPayload>;
+
+type CompletionResult = ResultWithError<CompletionPayload>;
+
+type SignatureHelpResult = ResultWithError<SignatureHelpPayload>;
+
+type FormatResult = ResultWithError<FormatPayload>;
+
+type CodeActionsResult = ResultWithError<CodeActionsPayload>;
+
+type RenameResult = ResultWithError<RenamePayload>;
+
+type DeleteResult = ResultWithError<DeletePayload>;
+
+type CapabilitiesResult = ResultWithError<CapabilitiesPayload>;
+
+type ExternalSymbolsResult = ResultWithError<ExternalSymbolsPayload>;
+
+type ParseImportsResult = ResultWithError<ParseImportsPayload>;
+
+type TypeDepsResult = ResultWithError<TypeDepsPayload>;
+
+type ExternalIndexResult = ResultWithError<ExternalIndexPayload>;
+
+type ExternalSearchResult = ResultWithError<ExternalSearchPayload>;
+
+interface LspDiagnosticProvider {
+  workspaceDiagnostics?: boolean;
+}
+
+interface LspServerCapabilities {
+  diagnosticProvider?: LspDiagnosticProvider;
+}
+
+interface LspInitializeResult {
+  capabilities?: LspServerCapabilities;
+}
+
+interface WorkspaceDiagnosticsValuePayload {
+  __unsupported?: boolean;
+}
+
+type WorkspaceDiagnosticsValue = WorkspaceDiagnosticsValuePayload | null;
+
+interface DefinitionPreviewOptions {
+  before?: number;
+  after?: number;
+  include_body?: boolean;
+}
 
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -157,7 +365,7 @@ const resolveLineNumber0 = (lines: string[], line: LineParam): number => {
 
 const NEARBY_SEARCH_RANGE = 5;
 
-const findSymbolPosition = (lines: string[], lineIdx: number, symbolName: string): { line: number; character: number } => {
+const findSymbolPosition = (lines: string[], lineIdx: number, symbolName: string): LspPosition => {
   // 1. Exact line (fast path)
   const exactCol = (lines[lineIdx] ?? '').indexOf(symbolName);
 
@@ -376,7 +584,7 @@ const findReferencesUseCase = async (input: SymbolAtLineInput): Promise<Referenc
 };
 
 const getDefinitionsUseCase = async (
-  input: SymbolAtLineInput & { before?: number; after?: number; include_body?: boolean },
+  input: SymbolAtLineInput & DefinitionPreviewOptions,
 ): Promise<DefinitionsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
@@ -456,9 +664,7 @@ const getAllDiagnosticsUseCase = async (input: RootInput): Promise<DiagnosticsRe
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       // Check capabilities first — tsgo may not support workspace diagnostics.
-      const init = session.initializeResult as {
-        capabilities?: { diagnosticProvider?: { workspaceDiagnostics?: boolean } };
-      };
+      const init = session.initializeResult as LspInitializeResult;
       const diagCap = init?.capabilities?.diagnosticProvider;
 
       if (diagCap && diagCap.workspaceDiagnostics === false) {
@@ -476,7 +682,7 @@ const getAllDiagnosticsUseCase = async (input: RootInput): Promise<DiagnosticsRe
     return { ok: false, error: result.error };
   }
 
-  const value = result.value as { __unsupported?: boolean } | null;
+  const value = result.value as WorkspaceDiagnosticsValue;
 
   if (value && value.__unsupported) {
     return {
@@ -511,7 +717,7 @@ const getDocumentSymbolsUseCase = async (input: FileInput): Promise<SymbolsResul
   return { ok: true, symbols: result.value };
 };
 
-const getWorkspaceSymbolsUseCase = async (input: RootInput & { query?: string }): Promise<SymbolsResult> => {
+const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput): Promise<SymbolsResult> => {
   const rootAbs = resolveRootAbs(input.root);
 
   input.logger.debug('lsp:workspaceSymbols', { query: input.query });
@@ -713,7 +919,7 @@ const renameSymbolUseCase = async (input: RenameInput): Promise<RenameResult> =>
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-        let pos: { line: number; character: number };
+        let pos: LspPosition;
 
         if (input.line !== undefined) {
           const baseLineIdx = resolveLineNumber0(doc.lines, input.line);

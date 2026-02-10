@@ -7,18 +7,72 @@ import { parseSource } from '../../engine/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
 import { indexSymbolsUseCase } from '../symbol-index/symbol-index.usecases';
 
-type SourcePosition = { line: number; column: number };
+interface SourcePosition {
+  line: number;
+  column: number;
+}
 
-type SourceSpan = { start: SourcePosition; end: SourcePosition };
+interface SourceSpan {
+  start: SourcePosition;
+  end: SourcePosition;
+}
 
-type Extracted = { kind: string; name: string; span: SourceSpan };
+type Extracted = ReturnType<typeof extractSymbolsOxc>[number];
 
-type EditResult = {
+interface EditResult {
   ok: boolean;
   filePath: string;
   changed: boolean;
   error?: string;
-};
+}
+
+interface EditResultWithCount extends EditResult {
+  matchCount?: number;
+}
+
+interface ReplaceRangeInput {
+  root: string;
+  relativePath: string;
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  newText: string;
+  logger: FirebatLogger;
+}
+
+interface ReplaceRegexInput {
+  root: string;
+  relativePath: string;
+  regex: string;
+  repl: string;
+  allowMultipleOccurrences?: boolean;
+  logger: FirebatLogger;
+}
+
+interface InsertBeforeSymbolInput {
+  root: string;
+  relativePath: string;
+  namePath: string;
+  body: string;
+  logger: FirebatLogger;
+}
+
+interface InsertAfterSymbolInput {
+  root: string;
+  relativePath: string;
+  namePath: string;
+  body: string;
+  logger: FirebatLogger;
+}
+
+interface ReplaceSymbolBodyInput {
+  root: string;
+  relativePath: string;
+  namePath: string;
+  body: string;
+  logger: FirebatLogger;
+}
 
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -67,7 +121,7 @@ const findByNamePath = (symbols: ReadonlyArray<Extracted>, namePath: string): Ex
     .split('/')
     .map(p => p.trim())
     .filter(Boolean);
-  const needle = parts.length > 0 ? parts[parts.length - 1]! : namePath.trim();
+  const needle = parts.length > 0 ? (parts[parts.length - 1] ?? '') : namePath.trim();
 
   if (!needle) {
     return null;
@@ -100,16 +154,7 @@ const reindexFile = async (rootAbs: string, fileAbs: string, logger: FirebatLogg
   await indexSymbolsUseCase({ root: rootAbs, targets: [fileAbs], logger }).catch(() => undefined);
 };
 
-export const replaceRangeUseCase = async (input: {
-  root: string;
-  relativePath: string;
-  startLine: number;
-  startColumn: number;
-  endLine: number;
-  endColumn: number;
-  newText: string;
-  logger: FirebatLogger;
-}): Promise<EditResult> => {
+export const replaceRangeUseCase = async (input: ReplaceRangeInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
@@ -139,14 +184,7 @@ export const replaceRangeUseCase = async (input: {
   }
 };
 
-export const replaceRegexUseCase = async (input: {
-  root: string;
-  relativePath: string;
-  regex: string;
-  repl: string;
-  allowMultipleOccurrences?: boolean;
-  logger: FirebatLogger;
-}): Promise<EditResult & { matchCount?: number }> => {
+export const replaceRegexUseCase = async (input: ReplaceRegexInput): Promise<EditResultWithCount> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
@@ -178,13 +216,7 @@ export const replaceRegexUseCase = async (input: {
   }
 };
 
-export const insertBeforeSymbolUseCase = async (input: {
-  root: string;
-  namePath: string;
-  relativePath: string;
-  body: string;
-  logger: FirebatLogger;
-}): Promise<EditResult> => {
+export const insertBeforeSymbolUseCase = async (input: InsertBeforeSymbolInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
@@ -193,7 +225,7 @@ export const insertBeforeSymbolUseCase = async (input: {
   try {
     const prev = await readFile(fileAbs, 'utf8');
     const parsed = parseSource(fileAbs, prev);
-    const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
+    const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
 
     if (!sym) {
@@ -217,13 +249,7 @@ export const insertBeforeSymbolUseCase = async (input: {
   }
 };
 
-export const insertAfterSymbolUseCase = async (input: {
-  root: string;
-  namePath: string;
-  relativePath: string;
-  body: string;
-  logger: FirebatLogger;
-}): Promise<EditResult> => {
+export const insertAfterSymbolUseCase = async (input: InsertAfterSymbolInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
@@ -232,7 +258,7 @@ export const insertAfterSymbolUseCase = async (input: {
   try {
     const prev = await readFile(fileAbs, 'utf8');
     const parsed = parseSource(fileAbs, prev);
-    const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
+    const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
 
     if (!sym) {
@@ -254,13 +280,7 @@ export const insertAfterSymbolUseCase = async (input: {
   }
 };
 
-export const replaceSymbolBodyUseCase = async (input: {
-  root: string;
-  namePath: string;
-  relativePath: string;
-  body: string;
-  logger: FirebatLogger;
-}): Promise<EditResult> => {
+export const replaceSymbolBodyUseCase = async (input: ReplaceSymbolBodyInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
@@ -269,7 +289,7 @@ export const replaceSymbolBodyUseCase = async (input: {
   try {
     const prev = await readFile(fileAbs, 'utf8');
     const parsed = parseSource(fileAbs, prev);
-    const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
+    const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
 
     if (!sym) {

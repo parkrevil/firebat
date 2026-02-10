@@ -1,10 +1,6 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-
-import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
-import { getLineColumn } from '../../engine/source-position';
-
 import type {
   BoundaryRole,
   ExceptionHygieneAnalysis,
@@ -12,6 +8,9 @@ import type {
   ExceptionHygieneFindingKind,
   SourceSpan,
 } from './types';
+
+import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { getLineColumn } from '../../engine/source-position';
 
 const getSpan = (node: Node, sourceText: string): SourceSpan => {
   const start = getLineColumn(sourceText, node.start);
@@ -41,15 +40,17 @@ const inferBoundaryRole = (filePath: string): BoundaryRole => {
   return 'unknown';
 };
 
-const pushFinding = (findings: ExceptionHygieneFinding[], input: {
+interface PushFindingInput {
   readonly kind: ExceptionHygieneFindingKind;
   readonly filePath: string;
   readonly sourceText: string;
   readonly node: Node;
   readonly message: string;
   readonly evidence: string;
-  readonly recipes: readonly string[];
-}): void => {
+  readonly recipes: ReadonlyArray<string>;
+}
+
+const pushFinding = (findings: ExceptionHygieneFinding[], input: PushFindingInput): void => {
   const evidence = input.evidence.length > 0 ? input.evidence : 'unknown';
 
   findings.push({
@@ -71,50 +72,58 @@ const getEvidenceLineAt = (sourceText: string, index: number): string => {
   return sourceText.slice(start, end).trim();
 };
 
-const isIdentifierName = (node: unknown, name: string): boolean => {
-  return !!node && typeof node === 'object' && isOxcNode(node as any) && (node as any).type === 'Identifier' && isNodeRecord(node as any) && (node as any).name === name;
+const isIdentifierName = (node: NodeValue, name: string): boolean => {
+  if (!isOxcNode(node)) {
+    return false;
+  }
+
+  if (node.type !== 'Identifier' || !isNodeRecord(node)) {
+    return false;
+  }
+
+  return typeof node.name === 'string' && node.name === name;
 };
 
-const getMemberPropertyName = (callee: any): string | null => {
+const getMemberPropertyName = (callee: NodeValue): string | null => {
   if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
     return null;
   }
 
-  const prop = (callee as any).property;
+  const prop = callee.property;
 
-  if (isOxcNode(prop) && prop.type === 'Identifier' && isNodeRecord(prop) && typeof (prop as any).name === 'string') {
-    return (prop as any).name as string;
+  if (isOxcNode(prop) && prop.type === 'Identifier' && isNodeRecord(prop) && typeof prop.name === 'string') {
+    return prop.name;
   }
 
   return null;
 };
 
-const isPromiseFactoryCall = (expr: any): boolean => {
+const isPromiseFactoryCall = (expr: NodeValue): boolean => {
   if (!isOxcNode(expr) || expr.type !== 'CallExpression' || !isNodeRecord(expr)) {
     // `new Promise(...)`
     if (isOxcNode(expr) && expr.type === 'NewExpression' && isNodeRecord(expr)) {
-      const callee = (expr as any).callee;
+      const callee = expr.callee;
 
-      return isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && (callee as any).name === 'Promise';
+      return isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise';
     }
 
     return false;
   }
 
-  const callee = (expr as any).callee;
+  const callee = expr.callee;
 
   if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
     return false;
   }
 
-  const obj = (callee as any).object;
-  const prop = (callee as any).property;
+  const obj = callee.object;
+  const prop = callee.property;
 
   if (!isOxcNode(obj) || !isOxcNode(prop)) {
     return false;
   }
 
-  if (obj.type !== 'Identifier' || !isNodeRecord(obj) || (obj as any).name !== 'Promise') {
+  if (obj.type !== 'Identifier' || !isNodeRecord(obj) || obj.name !== 'Promise') {
     return false;
   }
 
@@ -122,24 +131,18 @@ const isPromiseFactoryCall = (expr: any): boolean => {
     return false;
   }
 
-  const name = (prop as any).name;
+  const name = prop.name;
 
-  return (
-    name === 'resolve' ||
-    name === 'reject' ||
-    name === 'all' ||
-    name === 'race' ||
-    name === 'any' ||
-    name === 'allSettled'
-  );
+  return name === 'resolve' || name === 'reject' || name === 'all' || name === 'race' || name === 'any' || name === 'allSettled';
 };
 
-const containsReturnStatement = (node: any): boolean => {
+const containsReturnStatement = (node: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
     if (inner.type === 'ReturnStatement') {
       found = true;
+
       return false;
     }
 
@@ -149,12 +152,13 @@ const containsReturnStatement = (node: any): boolean => {
   return found;
 };
 
-const containsReturnOrThrowStatement = (node: any): boolean => {
+const containsReturnOrThrowStatement = (node: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
     if (inner.type === 'ReturnStatement' || inner.type === 'ThrowStatement') {
       found = true;
+
       return false;
     }
 
@@ -164,12 +168,13 @@ const containsReturnOrThrowStatement = (node: any): boolean => {
   return found;
 };
 
-const containsThrowStatement = (node: any): boolean => {
+const containsThrowStatement = (node: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
     if (inner.type === 'ThrowStatement') {
       found = true;
+
       return false;
     }
 
@@ -179,12 +184,13 @@ const containsThrowStatement = (node: any): boolean => {
   return found;
 };
 
-const containsIdentifierUse = (node: any, name: string): boolean => {
+const containsIdentifierUse = (node: NodeValue, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (inner.type === 'Identifier' && isNodeRecord(inner) && (inner as any).name === name) {
+    if (inner.type === 'Identifier' && isNodeRecord(inner) && inner.name === name) {
       found = true;
+
       return false;
     }
 
@@ -194,7 +200,7 @@ const containsIdentifierUse = (node: any, name: string): boolean => {
   return found;
 };
 
-const hasCausePropertyWithIdentifier = (node: any, name: string): boolean => {
+const hasCausePropertyWithIdentifier = (node: NodeValue, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
@@ -202,19 +208,18 @@ const hasCausePropertyWithIdentifier = (node: any, name: string): boolean => {
       return true;
     }
 
-    const props = Array.isArray((inner as any).properties) ? ((inner as any).properties as any[]) : [];
+    const props = Array.isArray(inner.properties) ? (inner.properties as ReadonlyArray<NodeValue>) : [];
 
     for (const prop of props) {
       if (!isOxcNode(prop) || !isNodeRecord(prop) || prop.type !== 'Property') {
         continue;
       }
 
-      const key = (prop as any).key;
-      const value = (prop as any).value;
-
+      const key = prop.key as NodeValue;
+      const value = prop.value as NodeValue;
       const isCauseKey =
-        (isOxcNode(key) && key.type === 'Identifier' && isNodeRecord(key) && (key as any).name === 'cause') ||
-        (isOxcNode(key) && key.type === 'Literal' && isNodeRecord(key) && (key as any).value === 'cause');
+        (isOxcNode(key) && key.type === 'Identifier' && isNodeRecord(key) && key.name === 'cause') ||
+        (isOxcNode(key) && key.type === 'Literal' && isNodeRecord(key) && key.value === 'cause');
 
       if (!isCauseKey) {
         continue;
@@ -222,6 +227,7 @@ const hasCausePropertyWithIdentifier = (node: any, name: string): boolean => {
 
       if (isIdentifierName(value, name)) {
         found = true;
+
         return false;
       }
     }
@@ -232,35 +238,35 @@ const hasCausePropertyWithIdentifier = (node: any, name: string): boolean => {
   return found;
 };
 
-const isConsoleLikeCall = (stmt: any): boolean => {
+const isConsoleLikeCall = (stmt: NodeValue): boolean => {
   if (!isOxcNode(stmt) || !isNodeRecord(stmt) || stmt.type !== 'ExpressionStatement') {
     return false;
   }
 
-  const expr = (stmt as any).expression;
+  const expr = stmt.expression;
 
   if (!isOxcNode(expr) || !isNodeRecord(expr) || expr.type !== 'CallExpression') {
     return false;
   }
 
-  const callee = (expr as any).callee;
+  const callee = expr.callee;
 
   if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'MemberExpression') {
     return false;
   }
 
-  const obj = (callee as any).object;
+  const obj = callee.object;
 
-  return isOxcNode(obj) && isNodeRecord(obj) && obj.type === 'Identifier' && (obj as any).name === 'console';
+  return isOxcNode(obj) && isNodeRecord(obj) && obj.type === 'Identifier' && obj.name === 'console';
 };
 
-const hasNonEmptyReturnInFinallyCallback = (arg: any): boolean => {
+const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
   if (!isOxcNode(arg)) {
     return false;
   }
 
   if (arg.type === 'ArrowFunctionExpression' && isNodeRecord(arg)) {
-    const body = (arg as any).body;
+    const body = arg.body;
 
     if (isOxcNode(body) && body.type === 'BlockStatement') {
       return containsReturnStatement(body);
@@ -271,7 +277,7 @@ const hasNonEmptyReturnInFinallyCallback = (arg: any): boolean => {
   }
 
   if ((arg.type === 'FunctionExpression' || arg.type === 'FunctionDeclaration') && isNodeRecord(arg)) {
-    const body = (arg as any).body;
+    const body = arg.body;
 
     if (isOxcNode(body) && body.type === 'BlockStatement') {
       return containsReturnStatement(body);
@@ -285,16 +291,15 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   const findings: ExceptionHygieneFinding[] = [];
   const boundaryRole = inferBoundaryRole(filePath);
   const tryBlockRanges: Array<{ readonly start: number; readonly end: number }> = [];
-
   const tryCatchStack: Array<{ readonly hasCatch: boolean }> = [];
 
-  const reportOverscopedTryIfNeeded = (node: any): void => {
+  const reportOverscopedTryIfNeeded = (node: NodeValue): void => {
     if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {
       return;
     }
 
-    const handler = (node as any).handler;
-    const block = (node as any).block;
+    const handler = node.handler;
+    const block = node.block;
 
     if (!isOxcNode(handler) || handler.type !== 'CatchClause') {
       return;
@@ -304,13 +309,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    const stmts = Array.isArray((block as any).body) ? ((block as any).body as any[]) : [];
+    const stmts = Array.isArray(block.body) ? (block.body as ReadonlyArray<NodeValue>) : [];
 
     // Objective-only heuristic (spec): many top-level statements
     if (stmts.length >= 10) {
       pushFinding(findings, {
         kind: 'overscoped-try',
-        node: node as any,
+        node,
         filePath,
         sourceText,
         message: 'try scope is too broad and hides error boundaries',
@@ -320,14 +325,14 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
   };
 
-  const reportExceptionControlFlowIfNeeded = (node: any): void => {
+  const reportExceptionControlFlowIfNeeded = (node: NodeValue): void => {
     if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {
       return;
     }
 
-    const handler = (node as any).handler;
-    const finalizer = (node as any).finalizer;
-    const block = (node as any).block;
+    const handler = node.handler;
+    const finalizer = node.finalizer;
+    const block = node.block;
 
     if (!isOxcNode(handler) || handler.type !== 'CatchClause' || finalizer !== null) {
       return;
@@ -337,30 +342,36 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    const stmts = Array.isArray((block as any).body) ? ((block as any).body as any[]) : [];
+    const stmts = Array.isArray(block.body) ? (block.body as ReadonlyArray<NodeValue>) : [];
+
     if (stmts.length !== 1) {
       return;
     }
 
-    const catchBody = (handler as any).body;
+    const catchBody = handler.body;
+
     if (!isOxcNode(catchBody) || catchBody.type !== 'BlockStatement' || !isNodeRecord(catchBody)) {
       return;
     }
 
-    const catchStmts = Array.isArray((catchBody as any).body) ? ((catchBody as any).body as any[]) : [];
+    const catchStmts = Array.isArray(catchBody.body) ? (catchBody.body as ReadonlyArray<NodeValue>) : [];
     const hasThrow = containsThrowStatement(catchBody);
+
     if (hasThrow) {
       return;
     }
 
-    const hasDefaultReturn = catchStmts.some(s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'));
+    const hasDefaultReturn = catchStmts.some(
+      s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
+    );
+
     if (!hasDefaultReturn) {
       return;
     }
 
     pushFinding(findings, {
       kind: 'exception-control-flow',
-      node: node as any,
+      node,
       filePath,
       sourceText,
       message: 'try/catch is used for control flow with default fallback',
@@ -369,22 +380,28 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     });
   };
 
-  const reportSilentCatchIfNeeded = (catchClause: any): void => {
-    const param = (catchClause as any).param;
-    const body = (catchClause as any).body;
+  const reportSilentCatchIfNeeded = (catchClause: NodeValue): void => {
+    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
+      return;
+    }
+
+    const param = catchClause.param;
+    const body = catchClause.body;
 
     if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
       return;
     }
 
-    const stmts = Array.isArray((body as any).body) ? ((body as any).body as any[]) : [];
+    const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
     const hasThrow = containsThrowStatement(body);
 
     if (hasThrow) {
       return;
     }
 
-    const hasReturnOrJump = stmts.some(s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'));
+    const hasReturnOrJump = stmts.some(
+      s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
+    );
     const isEmpty = stmts.length === 0;
     const isOnlyConsole = stmts.length > 0 && stmts.every(isConsoleLikeCall);
 
@@ -394,7 +411,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     pushFinding(findings, {
       kind: 'silent-catch',
-      node: catchClause as any,
+      node: catchClause,
       filePath,
       sourceText,
       message: 'catch swallows an error without propagation or explicit handling',
@@ -405,9 +422,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     void param;
   };
 
-  const reportCatchTransformHygieneIfNeeded = (catchClause: any): void => {
-    const param = (catchClause as any).param;
-    const body = (catchClause as any).body;
+  const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
+    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
+      return;
+    }
+
+    const param = catchClause.param;
+    const body = catchClause.body;
 
     if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
       return;
@@ -417,7 +438,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    const name = (param as any).name as string;
+    const name = param.name;
 
     // Find throw new X(...)
     walkOxcTree(body, node => {
@@ -425,7 +446,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      const arg = (node as any).argument;
+      const arg = node.argument;
 
       if (!isOxcNode(arg) || arg.type !== 'NewExpression' || !isNodeRecord(arg)) {
         return true;
@@ -438,11 +459,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       if (!usesIdentifier && !hasCause) {
         pushFinding(findings, {
           kind: 'catch-transform-hygiene',
-          node: catchClause as any,
+          node: catchClause,
           filePath,
           sourceText,
           message: 'catch transforms error without preserving cause/context',
-          evidence: getEvidenceLineAt(sourceText, (node as any).start),
+          evidence: getEvidenceLineAt(sourceText, node.start),
           recipes: ['RCP-02'],
         });
       }
@@ -460,15 +481,18 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     return tryCatchStack.slice(0, -1).some(e => e.hasCatch);
   };
 
-  const reportRedundantNestedCatchIfNeeded = (catchClause: any): void => {
+  const reportRedundantNestedCatchIfNeeded = (catchClause: NodeValue): void => {
     if (!isNestedUnderOuterCatch()) {
       return;
     }
 
     // If inner catch is useless-catch OR silent-catch style, report redundancy.
-    const param = (catchClause as any).param;
-    const body = (catchClause as any).body;
+    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
+      return;
+    }
 
+    const param = catchClause.param;
+    const body = catchClause.body;
     const isUselessRethrow = (() => {
       if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
         return false;
@@ -478,21 +502,21 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return false;
       }
 
-      const name = (param as any).name as string;
-      const stmts = Array.isArray((body as any).body) ? ((body as any).body as any[]) : [];
+      const name = param.name;
+      const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
 
       if (stmts.length !== 1) {
         return false;
       }
 
       const only = stmts[0];
+
       if (!isOxcNode(only) || only.type !== 'ThrowStatement' || !isNodeRecord(only)) {
         return false;
       }
 
-      return isIdentifierName((only as any).argument, name);
+      return isIdentifierName(only.argument, name);
     })();
-
     const isSilent = (() => {
       if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
         return false;
@@ -502,8 +526,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return false;
       }
 
-      const stmts = Array.isArray((body as any).body) ? ((body as any).body as any[]) : [];
-      const hasReturnOrJump = stmts.some(s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'));
+      const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
+      const hasReturnOrJump = stmts.some(
+        s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
+      );
       const isEmpty = stmts.length === 0;
       const isOnlyConsole = stmts.length > 0 && stmts.every(isConsoleLikeCall);
 
@@ -516,7 +542,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     pushFinding(findings, {
       kind: 'redundant-nested-catch',
-      node: catchClause as any,
+      node: catchClause,
       filePath,
       sourceText,
       message: 'nested catch is redundant under an outer catch',
@@ -525,7 +551,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     });
   };
 
-  const visit = (value: any): void => {
+  const visit = (value: NodeValue): void => {
     if (Array.isArray(value)) {
       for (const entry of value) {
         visit(entry);
@@ -538,12 +564,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    const node = value as any;
+    const node = value;
 
     // Pre-order hooks
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
       // Existing bookkeeping for return-await-policy
-      const block = (node as any).block;
+      const block = node.block;
+
       if (isOxcNode(block)) {
         tryBlockRanges.push({ start: block.start, end: block.end });
       }
@@ -551,15 +578,17 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       reportOverscopedTryIfNeeded(node);
       reportExceptionControlFlowIfNeeded(node);
 
-      const hasCatch = isOxcNode((node as any).handler) && (node as any).handler.type === 'CatchClause';
+      const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
+
       tryCatchStack.push({ hasCatch });
 
       // Visit children in structure order
-      visit((node as any).block);
-      visit((node as any).handler);
-      visit((node as any).finalizer);
+      visit(node.block);
+      visit(node.handler);
+      visit(node.finalizer);
 
       tryCatchStack.pop();
+
       return;
     }
 
@@ -576,6 +605,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     const entries = Object.entries(node);
+
     for (const [key, childValue] of entries) {
       if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
         continue;
@@ -589,19 +619,19 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   walkOxcTree(program, node => {
     // EH-02 unsafe-finally: try/finally that throws/returns in finalizer
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      const block = (node as any).block;
+      const block = node.block;
 
       if (isOxcNode(block)) {
         tryBlockRanges.push({ start: block.start, end: block.end });
       }
 
-      const finalizer = (node as any).finalizer;
+      const finalizer = node.finalizer;
 
       if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
         if (containsReturnOrThrowStatement(finalizer)) {
           pushFinding(findings, {
             kind: 'unsafe-finally',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'finally masks original control flow with return/throw',
@@ -620,23 +650,29 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      const param = (node as any).param;
-      const body = (node as any).body;
+      const param = node.param;
+      const body = node.body;
 
-      if (isOxcNode(param) && param.type === 'Identifier' && isNodeRecord(param) && isOxcNode(body) && body.type === 'BlockStatement') {
-        const name = (param as any).name as string;
-        const stmts = Array.isArray((body as any).body) ? ((body as any).body as any[]) : [];
+      if (
+        isOxcNode(param) &&
+        param.type === 'Identifier' &&
+        isNodeRecord(param) &&
+        isOxcNode(body) &&
+        body.type === 'BlockStatement'
+      ) {
+        const name = param.name;
+        const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
 
         if (stmts.length === 1) {
           const only = stmts[0];
 
           if (isOxcNode(only) && only.type === 'ThrowStatement' && isNodeRecord(only)) {
-            const arg = (only as any).argument;
+            const arg = only.argument;
 
             if (isIdentifierName(arg, name)) {
               pushFinding(findings, {
                 kind: 'useless-catch',
-                node: node as any,
+                node,
                 filePath,
                 sourceText,
                 message: 'catch rethrows without adding context',
@@ -651,17 +687,17 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     // EH-03 return-in-finally: .finally(() => { return ... })
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
-      const callee = (node as any).callee;
+      const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
       if (method === 'finally') {
-        const args = Array.isArray((node as any).arguments) ? ((node as any).arguments as any[]) : [];
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const first = args[0];
 
         if (hasNonEmptyReturnInFinallyCallback(first)) {
           pushFinding(findings, {
             kind: 'return-in-finally',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'finally callback should not return a value',
@@ -673,13 +709,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // EH-05 prefer-catch: .then(success, failure)
       if (method === 'then') {
-        const args = Array.isArray((node as any).arguments) ? ((node as any).arguments as any[]) : [];
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const second = args[1];
 
         if (second !== undefined) {
           pushFinding(findings, {
             kind: 'prefer-catch',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'prefer .catch over then second argument',
@@ -691,28 +727,28 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // EH-06 prefer-await-to-then: long then chains with block callbacks
       if (method === 'then') {
-        const inner = (callee as any).object;
+        const inner = isOxcNode(callee) && isNodeRecord(callee) ? callee.object : null;
         const hasNestedThen =
           isOxcNode(inner) &&
           inner.type === 'CallExpression' &&
           isNodeRecord(inner) &&
-          getMemberPropertyName((inner as any).callee) === 'then';
+          getMemberPropertyName(inner.callee) === 'then';
 
         if (hasNestedThen) {
-          const args = Array.isArray((node as any).arguments) ? ((node as any).arguments as any[]) : [];
+          const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
           const anyBlockCb = args.some(
             arg =>
               isOxcNode(arg) &&
               arg.type === 'ArrowFunctionExpression' &&
               isNodeRecord(arg) &&
-              isOxcNode((arg as any).body) &&
-              (arg as any).body.type === 'BlockStatement',
+              isOxcNode(arg.body) &&
+              arg.body.type === 'BlockStatement',
           );
 
           if (anyBlockCb) {
             pushFinding(findings, {
               kind: 'prefer-await-to-then',
-              node: node as any,
+              node,
               filePath,
               sourceText,
               message: 'prefer await over long then chains for control flow',
@@ -726,10 +762,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     // Expression-statement based rules.
     if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
-      const expr = (node as any).expression;
+      const expr = node.expression;
 
       // ignore explicit void
-      if (isOxcNode(expr) && expr.type === 'UnaryExpression' && isNodeRecord(expr) && (expr as any).operator === 'void') {
+      if (isOxcNode(expr) && expr.type === 'UnaryExpression' && isNodeRecord(expr) && expr.operator === 'void') {
         return true;
       }
 
@@ -737,7 +773,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       if (isPromiseFactoryCall(expr)) {
         pushFinding(findings, {
           kind: 'floating-promises',
-          node: node as any,
+          node,
           filePath,
           sourceText,
           message: 'promise is created but not observed',
@@ -750,13 +786,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // EH-04 catch-or-return: top-level then call without catch
       if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
-        const callee = (expr as any).callee;
+        const callee = expr.callee;
         const method = getMemberPropertyName(callee);
 
         if (method === 'then') {
           pushFinding(findings, {
             kind: 'catch-or-return',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'promise chain should have catch or be awaited/returned',
@@ -764,39 +800,39 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
             recipes: ['RCP-05', 'RCP-06'],
           });
         }
-
       }
     }
 
     // EH-08 misused-promises: async callback passed to forEach
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
-      const callee = (node as any).callee;
+      const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
-      if (method && (
-        method === 'forEach' ||
-        method === 'map' ||
-        method === 'filter' ||
-        method === 'some' ||
-        method === 'every' ||
-        method === 'find' ||
-        method === 'findIndex' ||
-        method === 'reduce' ||
-        method === 'reduceRight' ||
-        method === 'sort'
-      )) {
-        const args = Array.isArray((node as any).arguments) ? ((node as any).arguments as any[]) : [];
+      if (
+        method &&
+        (method === 'forEach' ||
+          method === 'map' ||
+          method === 'filter' ||
+          method === 'some' ||
+          method === 'every' ||
+          method === 'find' ||
+          method === 'findIndex' ||
+          method === 'reduce' ||
+          method === 'reduceRight' ||
+          method === 'sort')
+      ) {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const first = args[0];
         const isAsyncFn =
           isOxcNode(first) &&
           (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
           isNodeRecord(first) &&
-          (first as any).async === true;
+          first.async === true;
 
         if (isAsyncFn) {
           pushFinding(findings, {
             kind: 'misused-promises',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'async callback is passed where a sync callback is expected',
@@ -809,16 +845,18 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     // EH-09 return-await-policy: return await outside boundaries, or outside try/catch in boundaries
     if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
-      const arg = (node as any).argument;
+      const arg = node.argument;
 
       if (isOxcNode(arg) && arg.type === 'AwaitExpression') {
-        const insideTryBlock = tryBlockRanges.some(r => typeof node.start === 'number' && node.start >= r.start && node.start <= r.end);
+        const insideTryBlock = tryBlockRanges.some(
+          r => typeof node.start === 'number' && node.start >= r.start && node.start <= r.end,
+        );
         const isBoundary = boundaryRole === 'process' || boundaryRole === 'protocol' || boundaryRole === 'worker';
 
         if (!(isBoundary && insideTryBlock)) {
           pushFinding(findings, {
             kind: 'return-await-policy',
-            node: node as any,
+            node,
             filePath,
             sourceText,
             message: 'avoid return await outside boundaries',

@@ -6,7 +6,15 @@ import type { FirebatReport, OutputFormat } from './types';
 const toPos = (line: number, column: number): string => `${line}:${column}`;
 
 // ── Color helpers (stdout TTY-aware) ────────────────────────────────
-const isStdoutTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+const isStdoutTty = (): boolean => {
+  const stdout = process.stdout;
+
+  if (typeof stdout !== 'object' || stdout === null || !('isTTY' in stdout)) {
+    return false;
+  }
+
+  return Boolean((stdout as { isTTY?: boolean }).isTTY);
+};
 
 const A = {
   reset: '\x1b[0m',
@@ -152,21 +160,21 @@ const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const selectedDetectors = new Set(report.meta.detectors);
   const duplicates = report.analyses['exact-duplicates'] ?? [];
-  const waste = report.analyses['waste'] ?? [];
+  const waste = report.analyses.waste ?? [];
   const barrelPolicy = report.analyses['barrel-policy'] ?? { findings: [] };
   const unknownProof = report.analyses['unknown-proof'] ?? { status: 'ok' as const, tool: 'tsgo' as const, findings: [] };
-  const lint = report.analyses['lint'] ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
-  const format = report.analyses['format'] ?? { status: 'ok' as const, tool: 'oxfmt' as const };
-  const typecheck = report.analyses['typecheck'] ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
-  const deps = report.analyses['dependencies'] ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
-  const coupling = report.analyses['coupling'] ?? { hotspots: [] };
+  const lint = report.analyses.lint ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
+  const format = report.analyses.format ?? { status: 'ok' as const, tool: 'oxfmt' as const };
+  const typecheck = report.analyses.typecheck ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
+  const deps = report.analyses.dependencies ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
+  const coupling = report.analyses.coupling ?? { hotspots: [] };
   const structDups = report.analyses['structural-duplicates'] ?? { cloneClasses: [] };
-  const nesting = report.analyses['nesting'] ?? { items: [] };
+  const nesting = report.analyses.nesting ?? { items: [] };
   const earlyReturn = report.analyses['early-return'] ?? { items: [] };
   const exceptionHygiene = report.analyses['exception-hygiene'] ?? { status: 'ok' as const, tool: 'oxc' as const, findings: [] };
-  const noop = report.analyses['noop'] ?? { findings: [] };
+  const noop = report.analyses.noop ?? { findings: [] };
   const apiDrift = report.analyses['api-drift'] ?? { groups: [] };
-  const forwarding = report.analyses['forwarding'] ?? { findings: [] };
+  const forwarding = report.analyses.forwarding ?? { findings: [] };
   const lintErrors = lint.diagnostics.filter(d => d.severity === 'error').length;
   const typecheckErrors = typecheck.items.filter(i => i.severity === 'error').length;
   const formatFindings = format.status === 'needs-formatting' || format.status === 'failed' ? 1 : 0;
@@ -291,8 +299,7 @@ const formatText = (report: FirebatReport): string => {
       emoji: '🧯',
       label: 'Exception Hygiene',
       count: exceptionHygiene.findings.length,
-      filesCount:
-        exceptionHygiene.findings.length === 0 ? 0 : new Set(exceptionHygiene.findings.map(f => f.filePath)).size,
+      filesCount: exceptionHygiene.findings.length === 0 ? 0 : new Set(exceptionHygiene.findings.map(f => f.filePath)).size,
       timingKey: 'exception-hygiene',
     });
   }

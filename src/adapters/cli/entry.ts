@@ -12,17 +12,21 @@ import { formatReport } from '../../report';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
 import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
 
-const createCliLogger = (input: {
-  level: FirebatCliOptions['logLevel'];
-  logStack: FirebatCliOptions['logStack'];
-}): FirebatLogger => {
+interface CliLoggerInput {
+  readonly level: FirebatCliOptions['logLevel'];
+  readonly logStack: FirebatCliOptions['logStack'];
+}
+
+const createCliLogger = (input: CliLoggerInput): FirebatLogger => {
   return createPrettyConsoleLogger({
     level: input.level ?? 'info',
     includeStack: input.logStack ?? false,
   });
 };
 
-const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+const isTty = (): boolean => {
+  return Boolean(process.stdout?.isTTY);
+};
 
 const H = {
   reset: '\x1b[0m',
@@ -101,18 +105,26 @@ const printHelp = (): void => {
 };
 
 const countBlockingFindings = (report: FirebatReport): number => {
-  const typecheckErrors = report.analyses['typecheck']?.items?.filter(item => item.severity === 'error').length ?? 0;
-  const forwardingFindings = report.analyses['forwarding']?.findings?.length ?? 0;
-  const lintErrors = report.analyses['lint']?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
-  const unknownProofFindings = report.analyses['unknown-proof']?.findings?.length ?? 0;
-  const exceptionHygieneFindings = report.analyses['exception-hygiene']?.findings?.length ?? 0;
-  const formatStatus = report.analyses['format']?.status;
+  const { analyses } = report;
+  const {
+    'exact-duplicates': exactDuplicates,
+    'unknown-proof': unknownProof,
+    'exception-hygiene': exceptionHygiene,
+    'barrel-policy': barrelPolicy,
+  } = analyses;
+
+  const typecheckErrors = analyses.typecheck?.items?.filter(item => item.severity === 'error').length ?? 0;
+  const forwardingFindings = analyses.forwarding?.findings?.length ?? 0;
+  const lintErrors = analyses.lint?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
+  const unknownProofFindings = unknownProof?.findings?.length ?? 0;
+  const exceptionHygieneFindings = exceptionHygiene?.findings?.length ?? 0;
+  const formatStatus = analyses.format?.status;
   const formatFindings = formatStatus === 'needs-formatting' || formatStatus === 'failed' ? 1 : 0;
-  const barrelPolicyFindings = report.analyses['barrel-policy']?.findings?.length ?? 0;
+  const barrelPolicyFindings = barrelPolicy?.findings?.length ?? 0;
 
   return (
-    (report.analyses['exact-duplicates']?.length ?? 0) +
-    (report.analyses['waste']?.length ?? 0) +
+    (exactDuplicates?.length ?? 0) +
+    (analyses.waste?.length ?? 0) +
     barrelPolicyFindings +
     formatFindings +
     unknownProofFindings +
@@ -147,17 +159,51 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     return all;
   }
 
-  return all.filter(detector => {
-    const value = (features as any)[detector];
+  const {
+    'exact-duplicates': exactDuplicates,
+    waste,
+    'barrel-policy': barrelPolicy,
+    'unknown-proof': unknownProof,
+    'exception-hygiene': exceptionHygiene,
+    format,
+    lint,
+    typecheck,
+    dependencies,
+    coupling,
+    'structural-duplicates': structuralDuplicates,
+    nesting,
+    'early-return': earlyReturn,
+    noop,
+    'api-drift': apiDrift,
+    forwarding,
+  } = features;
 
-    return value !== false;
-  });
+  const enabled: Record<FirebatDetector, boolean> = {
+    'exact-duplicates': exactDuplicates !== false,
+    waste: waste !== false,
+    'barrel-policy': barrelPolicy !== false,
+    'unknown-proof': unknownProof !== false,
+    'exception-hygiene': exceptionHygiene !== false,
+    format: format !== false,
+    lint: lint !== false,
+    typecheck: typecheck !== false,
+    dependencies: dependencies !== false,
+    coupling: coupling !== false,
+    'structural-duplicates': structuralDuplicates !== false,
+    nesting: nesting !== false,
+    'early-return': earlyReturn !== false,
+    noop: noop !== false,
+    'api-drift': apiDrift !== false,
+    forwarding: forwarding !== false,
+  };
+
+  return all.filter(detector => enabled[detector]);
 };
 
 const resolveUnknownProofBoundaryGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = (features as any)?.['unknown-proof'];
+  const { 'unknown-proof': value } = features ?? {};
 
   if (value === undefined || value === false) {
     return undefined;
@@ -168,9 +214,11 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   }
 
   if (typeof value === 'object' && value !== null) {
-    const boundaryGlobs = (value as any).boundaryGlobs;
+    const boundaryGlobs = value.boundaryGlobs;
 
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string') ? boundaryGlobs : undefined;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
+      ? boundaryGlobs
+      : undefined;
   }
 
   return undefined;
@@ -179,7 +227,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = (features as any)?.['barrel-policy'];
+  const { 'barrel-policy': value } = features ?? {};
 
   if (value === undefined || value === false) {
     return undefined;
@@ -190,9 +238,11 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   }
 
   if (typeof value === 'object' && value !== null) {
-    const ignoreGlobs = (value as any).ignoreGlobs;
+    const ignoreGlobs = value.ignoreGlobs;
 
-    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
+    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
+      ? ignoreGlobs
+      : undefined;
   }
 
   return undefined;
@@ -201,8 +251,7 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
 const resolveMinSizeFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): FirebatCliOptions['minSize'] | undefined => {
-  const exact = features?.['exact-duplicates'];
-  const structural = features?.['structural-duplicates'];
+  const { 'exact-duplicates': exact, 'structural-duplicates': structural } = features ?? {};
   const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
   const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
 

@@ -106,8 +106,10 @@ const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
       return false;
     }
 
-    const aKeys = Object.keys(a as any).sort();
-    const bKeys = Object.keys(b as any).sort();
+    const aObj = a as Record<string, JsonValue>;
+    const bObj = b as Record<string, JsonValue>;
+    const aKeys = Object.keys(aObj).sort();
+    const bKeys = Object.keys(bObj).sort();
 
     if (aKeys.length !== bKeys.length) {
       return false;
@@ -118,8 +120,8 @@ const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
       }
     }
     for (const k of aKeys) {
-      const av = (a as any)[k] as JsonValue;
-      const bv = (b as any)[k] as JsonValue;
+      const av = aObj[k] as JsonValue;
+      const bv = bObj[k] as JsonValue;
 
       if (!deepEqual(av, bv)) {
         return false;
@@ -176,7 +178,46 @@ const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
   }
 };
 
-const parseYesFlag = (argv: readonly string[]): { yes: boolean; help: boolean } => {
+interface ParseYesResult {
+  yes: boolean;
+  help: boolean;
+}
+
+interface EnsureBaseSnapshotInput {
+  readonly rootAbs: string;
+  readonly firebatDir: string;
+  readonly assetFileName: string;
+  readonly templateText: string;
+}
+
+interface EnsureBaseSnapshotResult {
+  sha256: string;
+  filePath: string;
+}
+
+interface BaseSnapshot {
+  sha256: string;
+  filePath: string;
+}
+
+interface LoadedTemplate {
+  asset: string;
+  destAbs: string;
+  templateText: string;
+  templatePath: string;
+}
+
+interface PlannedWrite {
+  filePath: string;
+  text: string;
+}
+
+interface BaseWrite extends PlannedWrite {
+  asset: string;
+  sha256: string;
+}
+
+const parseYesFlag = (argv: readonly string[]): ParseYesResult => {
   let yes = false;
   let help = false;
 
@@ -248,12 +289,7 @@ const installTextFileNoOverwrite = async (destPath: string, desiredText: string)
   return { kind: 'installed', filePath: destPath, desiredSha256 };
 };
 
-const ensureBaseSnapshot = async (input: {
-  readonly rootAbs: string;
-  readonly firebatDir: string;
-  readonly assetFileName: string;
-  readonly templateText: string;
-}): Promise<{ sha256: string; filePath: string }> => {
+const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<EnsureBaseSnapshotResult> => {
   const baseDir = path.join(input.firebatDir, 'install-bases');
 
   await mkdir(baseDir, { recursive: true });
@@ -271,7 +307,15 @@ const ensureBaseSnapshot = async (input: {
   return { sha256, filePath };
 };
 
-const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
+const isTty = (): boolean => {
+  const stdout = process.stdout;
+
+  if (typeof stdout !== 'object' || stdout === null || !('isTTY' in stdout)) {
+    return false;
+  }
+
+  return Boolean((stdout as { isTTY?: boolean }).isTTY);
+};
 
 const H = {
   reset: '\x1b[0m',
@@ -348,7 +392,10 @@ const printUpdateHelp = (): void => {
   writeStdout(lines.join('\n'));
 };
 
-type AssetSpec = Readonly<{ asset: string; dest: string }>;
+interface AssetSpec {
+  readonly asset: string;
+  readonly dest: string;
+}
 
 const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.oxlintrc.jsonc', dest: '.oxlintrc.jsonc' },
@@ -385,7 +432,11 @@ const printAgentPromptGuide = (): void => {
   const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
   const getBoxInnerWidth = (): number => {
-    const columns = (process as any)?.stdout?.columns;
+    const stdout = process.stdout;
+    const columns =
+      typeof stdout === 'object' && stdout !== null && 'columns' in stdout
+        ? (stdout as { columns?: number }).columns
+        : undefined;
 
     if (typeof columns !== 'number' || !Number.isFinite(columns)) {
       return 72;
@@ -470,8 +521,8 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     const assetResults: AssetInstallResult[] = [];
     const assetManifest: Record<string, AssetTemplateMeta> = {};
-    const baseSnapshots: Record<string, { sha256: string; filePath: string }> = {};
-    const loadedTemplates: Array<{ asset: string; destAbs: string; templateText: string; templatePath: string }> = [];
+    const baseSnapshots: Record<string, BaseSnapshot> = {};
+    const loadedTemplates: LoadedTemplate[] = [];
 
     for (const item of ASSETS) {
       const loaded = await loadFirstExistingText(resolveAssetCandidates(item.asset));
@@ -496,7 +547,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         return 1;
       }
 
-      let manifest: any;
+      let manifest: unknown;
 
       try {
         manifest = await mf.json();
@@ -506,20 +557,21 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         return 1;
       }
 
-      const bases = manifest?.baseSnapshots;
+      const manifestObject = isPlainObject(manifest) ? (manifest as Record<string, unknown>) : null;
+      const bases = manifestObject?.baseSnapshots;
 
-      if (!bases || typeof bases !== 'object') {
+      if (!isPlainObject(bases)) {
         logger.error('update aborted: no base snapshots found. Run `firebat install` first.');
 
         return 1;
       }
 
       // Compute all merged results first (rollback policy).
-      const plannedWrites: Array<{ filePath: string; text: string }> = [];
-      const nextBaseWrites: Array<{ filePath: string; text: string; asset: string; sha256: string }> = [];
+      const plannedWrites: PlannedWrite[] = [];
+      const nextBaseWrites: BaseWrite[] = [];
 
       for (const tpl of loadedTemplates) {
-        const baseMeta = (bases as any)[tpl.asset];
+        const baseMeta = (bases as Record<string, unknown>)[tpl.asset] as BaseSnapshot | undefined;
         const basePath = typeof baseMeta?.filePath === 'string' ? baseMeta.filePath : null;
 
         if (!basePath) {

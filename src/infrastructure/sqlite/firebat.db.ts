@@ -102,13 +102,15 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
       }
 
       const deadlineMs = Date.now() + 15_000;
+      let hasTable = hasMemoriesTable();
 
-      while (!hasMemoriesTable()) {
+      while (!hasTable) {
         if (Date.now() > deadlineMs) {
           throw new Error('sqlite: migrations did not complete in time (memories table missing)');
         }
 
         await sleep(100);
+        hasTable = hasMemoriesTable();
       }
     }
 

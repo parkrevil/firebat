@@ -59,7 +59,7 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
     try {
       const stat = await Bun.file(abs).stat();
 
-      if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
+      if (stat.isDirectory()) {
         const files = await scanDirForSourceFiles(abs);
 
         results.push(...files);
