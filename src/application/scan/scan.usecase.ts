@@ -13,6 +13,7 @@ import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { detectExactDuplicates } from '../../features/exact-duplicates';
+import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
@@ -37,6 +38,7 @@ import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
+import { shouldIncludeNoopEmptyCatch } from './noop-gating';
 
 const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -415,12 +417,37 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
     earlyReturn = createEmptyEarlyReturn();
   }
 
+  let exceptionHygiene: ReturnType<typeof analyzeExceptionHygiene>;
+
+  if (options.detectors.includes('exception-hygiene')) {
+    const t0 = nowMs();
+
+    exceptionHygiene = analyzeExceptionHygiene(program);
+    detectorTimings['exception-hygiene'] = nowMs() - t0;
+
+    logger.debug('exception-hygiene', { durationMs: detectorTimings['exception-hygiene'] });
+  } else {
+    exceptionHygiene = createEmptyExceptionHygiene();
+  }
+
+  const includeNoopEmptyCatch = shouldIncludeNoopEmptyCatch({
+    exceptionHygieneSelected: options.detectors.includes('exception-hygiene'),
+    exceptionHygieneStatus: exceptionHygiene.status,
+  });
+
   let noop: ReturnType<typeof analyzeNoop>;
 
   if (options.detectors.includes('noop')) {
     const t0 = nowMs();
 
     noop = analyzeNoop(program);
+
+    if (!includeNoopEmptyCatch) {
+      noop = {
+        ...noop,
+        findings: noop.findings.filter(f => f.kind !== 'empty-catch'),
+      };
+    }
     detectorTimings.noop = nowMs() - t0;
 
     logger.debug('noop', { durationMs: detectorTimings.noop });
@@ -479,6 +506,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
       ...(selectedDetectors.has('waste') ? { waste: waste } : {}),
       ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': barrelPolicy } : {}),
       ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': unknownProof } : {}),
+      ...(selectedDetectors.has('exception-hygiene') ? { 'exception-hygiene': exceptionHygiene } : {}),
       ...(selectedDetectors.has('format') ? { format: format } : {}),
       ...(selectedDetectors.has('lint') ? { lint: lint } : {}),
       ...(selectedDetectors.has('typecheck') ? { typecheck: typecheck } : {}),

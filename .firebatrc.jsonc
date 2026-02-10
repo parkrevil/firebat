@@ -4,6 +4,7 @@
 
 
   "features": {
+    "exception-hygiene": true,
     "barrel-policy": true,
     "format": true,
     "unknown-proof": true,

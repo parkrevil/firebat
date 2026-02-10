@@ -80,7 +80,7 @@ const printHelp = (): void => {
     '',
     `    exact-duplicates, structural-duplicates, waste, nesting, early-return,`,
     `    noop, forwarding, barrel-policy, unknown-proof, api-drift,`,
-    `    lint, format, typecheck, dependencies, coupling`,
+    `    exception-hygiene, lint, format, typecheck, dependencies, coupling`,
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
     '',
@@ -105,6 +105,7 @@ const countBlockingFindings = (report: FirebatReport): number => {
   const forwardingFindings = report.analyses['forwarding']?.findings?.length ?? 0;
   const lintErrors = report.analyses['lint']?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
   const unknownProofFindings = report.analyses['unknown-proof']?.findings?.length ?? 0;
+  const exceptionHygieneFindings = report.analyses['exception-hygiene']?.findings?.length ?? 0;
   const formatStatus = report.analyses['format']?.status;
   const formatFindings = formatStatus === 'needs-formatting' || formatStatus === 'failed' ? 1 : 0;
   const barrelPolicyFindings = report.analyses['barrel-policy']?.findings?.length ?? 0;
@@ -115,6 +116,7 @@ const countBlockingFindings = (report: FirebatReport): number => {
     barrelPolicyFindings +
     formatFindings +
     unknownProofFindings +
+    exceptionHygieneFindings +
     lintErrors +
     typecheckErrors +
     forwardingFindings
@@ -127,6 +129,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'waste',
     'barrel-policy',
     'unknown-proof',
+    'exception-hygiene',
     'format',
     'lint',
     'typecheck',

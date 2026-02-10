@@ -163,6 +163,7 @@ const formatText = (report: FirebatReport): string => {
   const structDups = report.analyses['structural-duplicates'] ?? { cloneClasses: [] };
   const nesting = report.analyses['nesting'] ?? { items: [] };
   const earlyReturn = report.analyses['early-return'] ?? { items: [] };
+  const exceptionHygiene = report.analyses['exception-hygiene'] ?? { status: 'ok' as const, tool: 'oxc' as const, findings: [] };
   const noop = report.analyses['noop'] ?? { findings: [] };
   const apiDrift = report.analyses['api-drift'] ?? { groups: [] };
   const forwarding = report.analyses['forwarding'] ?? { findings: [] };
@@ -282,6 +283,17 @@ const formatText = (report: FirebatReport): string => {
       count: earlyReturn.items.length,
       filesCount: earlyReturn.items.length === 0 ? 0 : new Set(earlyReturn.items.map(i => i.filePath)).size,
       timingKey: 'early-return',
+    });
+  }
+
+  if (selectedDetectors.has('exception-hygiene')) {
+    summaryRows.push({
+      emoji: '🧯',
+      label: 'Exception Hygiene',
+      count: exceptionHygiene.findings.length,
+      filesCount:
+        exceptionHygiene.findings.length === 0 ? 0 : new Set(exceptionHygiene.findings.map(f => f.filePath)).size,
+      timingKey: 'exception-hygiene',
     });
   }
 
@@ -478,6 +490,21 @@ const formatText = (report: FirebatReport): string => {
       const suggestions = item.suggestions.length > 0 ? cc(` → ${item.suggestions.join('; ')}`, A.dim) : '';
 
       lines.push(`    ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}${suggestions}`);
+    }
+  }
+
+  if (selectedDetectors.has('exception-hygiene') && exceptionHygiene.findings.length > 0) {
+    lines.push(sectionHeader('🧯', 'Exception Hygiene', `${exceptionHygiene.findings.length} findings`));
+
+    for (const finding of exceptionHygiene.findings) {
+      const rel = path.relative(process.cwd(), finding.filePath);
+      const start = toPos(finding.span.start.line, finding.span.start.column);
+      const recipes = finding.recipes.length > 0 ? cc(` [${finding.recipes.join(', ')}]`, A.dim) : '';
+      const evidence = finding.evidence.length > 0 ? cc(` (${finding.evidence})`, A.dim) : '';
+
+      lines.push(
+        `    ${cc('·', A.dim)} ${finding.kind}: ${finding.message} ${cc(`@ ${rel}:${start}`, A.dim)}${recipes}${evidence}`,
+      );
     }
   }
 

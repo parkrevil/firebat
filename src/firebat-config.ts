@@ -33,6 +33,7 @@ export interface FirebatFeaturesConfig {
   readonly waste?: boolean | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: FeatureToggle<FirebatUnknownProofConfig> | undefined;
+  readonly 'exception-hygiene'?: boolean | undefined;
   readonly format?: boolean | undefined;
   readonly lint?: boolean | undefined;
   readonly typecheck?: boolean | undefined;
@@ -51,6 +52,7 @@ export interface FirebatMcpFeaturesConfig {
   readonly waste?: boolean | 'inherit' | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: InheritableFeatureToggle<FirebatUnknownProofConfig> | undefined;
+  readonly 'exception-hygiene'?: boolean | 'inherit' | undefined;
   readonly format?: boolean | 'inherit' | undefined;
   readonly lint?: boolean | 'inherit' | undefined;
   readonly typecheck?: boolean | 'inherit' | undefined;
@@ -115,6 +117,7 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
+        'exception-hygiene': z.boolean().optional(),
         format: z.boolean().optional(),
         lint: z.boolean().optional(),
         typecheck: z.boolean().optional(),
@@ -193,6 +196,7 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                       .strict(),
                   ])
                   .optional(),
+                'exception-hygiene': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 format: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 lint: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 typecheck: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),

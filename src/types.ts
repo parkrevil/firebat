@@ -1,3 +1,5 @@
+import type { ExceptionHygieneAnalysis } from './features/exception-hygiene/types';
+
 export type OutputFormat = 'text' | 'json';
 
 export type { FirebatConfig } from './firebat-config';
@@ -9,6 +11,7 @@ export type FirebatDetector =
   | 'waste'
   | 'barrel-policy'
   | 'unknown-proof'
+  | 'exception-hygiene'
   | 'format'
   | 'lint'
   | 'typecheck'
@@ -329,6 +332,7 @@ export interface FirebatAnalyses {
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly 'barrel-policy': BarrelPolicyAnalysis;
   readonly 'unknown-proof': UnknownProofAnalysis;
+  readonly 'exception-hygiene': ExceptionHygieneAnalysis;
   readonly format: FormatAnalysis;
   readonly lint: LintAnalysis;
   readonly typecheck: TypecheckAnalysis;
