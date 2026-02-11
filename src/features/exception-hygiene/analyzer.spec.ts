@@ -32,7 +32,6 @@ const assertFindingShape = (analysis: ReturnType<typeof analyzeSingle>) => {
     expect(finding.recipes.length).toBeGreaterThanOrEqual(1);
     expect(finding.span.start.line).toBeGreaterThanOrEqual(1);
     expect(finding.span.end.line).toBeGreaterThanOrEqual(finding.span.start.line);
-    expect(finding.boundaryRole).toBeDefined();
   }
 };
 
@@ -47,7 +46,7 @@ describe('analyzer', () => {
     expect(analysis.findings.length).toBe(0);
   });
 
-  it('should always include recipes and boundaryRole when finding is reported', () => {
+  it('should always include recipes when finding is reported', () => {
     // Arrange
     const filePath = '/virtual/src/adapters/cli/entry.ts';
     const source = [
@@ -62,7 +61,6 @@ describe('analyzer', () => {
     // Assert
     expect(analysis.findings.length).toBeGreaterThanOrEqual(1);
     assertFindingShape(analysis);
-    expect(analysis.findings.some(f => f.boundaryRole === 'process')).toBe(true);
   });
 
   it('should report useless-catch when catch rethrows the same error', () => {

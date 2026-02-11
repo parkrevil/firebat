@@ -1,5 +1,3 @@
-export type BoundaryRole = 'process' | 'protocol' | 'worker' | 'batch' | 'cleanup' | 'unknown';
-
 export type ExceptionHygieneFindingKind =
   | 'tool-unavailable'
   | 'useless-catch'
@@ -33,7 +31,6 @@ export interface ExceptionHygieneFinding {
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly evidence: string;
-  readonly boundaryRole: BoundaryRole;
   readonly recipes: ReadonlyArray<string>;
 }
 

@@ -3,6 +3,8 @@ import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
+import * as path from 'node:path';
+
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { parseArgs } from '../../arg-parse';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
@@ -380,7 +382,8 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   };
 
   if (merged.targets.length > 0) {
-    const targets = await expandTargets(merged.targets);
+    const rawTargets = merged.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)));
+    const targets = await expandTargets(rawTargets);
 
     logger.debug(`Expanded ${merged.targets.length} explicit targets to ${targets.length} files`);
 

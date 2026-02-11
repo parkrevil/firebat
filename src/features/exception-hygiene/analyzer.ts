@@ -2,7 +2,6 @@ import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type {
-  BoundaryRole,
   ExceptionHygieneAnalysis,
   ExceptionHygieneFinding,
   ExceptionHygieneFindingKind,
@@ -20,24 +19,6 @@ const getSpan = (node: Node, sourceText: string): SourceSpan => {
     start,
     end,
   };
-};
-
-const inferBoundaryRole = (filePath: string): BoundaryRole => {
-  const normalized = filePath.replaceAll('\\', '/');
-
-  if (normalized.endsWith('/index.ts') || normalized.includes('/src/adapters/cli/')) {
-    return 'process';
-  }
-
-  if (normalized.includes('/src/adapters/mcp/')) {
-    return 'protocol';
-  }
-
-  if (normalized.includes('/src/infrastructure/')) {
-    return 'worker';
-  }
-
-  return 'unknown';
 };
 
 interface PushFindingInput {
@@ -59,7 +40,6 @@ const pushFinding = (findings: ExceptionHygieneFinding[], input: PushFindingInpu
     filePath: input.filePath,
     span: getSpan(input.node, input.sourceText),
     evidence,
-    boundaryRole: inferBoundaryRole(input.filePath),
     recipes: input.recipes,
   });
 };
@@ -184,11 +164,6 @@ const containsThrowStatement = (node: NodeValue): boolean => {
   return found;
 };
 
-interface TryBlockRange {
-  readonly start: number;
-  readonly end: number;
-}
-
 interface TryCatchEntry {
   readonly hasCatch: boolean;
 }
@@ -298,9 +273,8 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
 
 const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ExceptionHygieneFinding[] => {
   const findings: ExceptionHygieneFinding[] = [];
-  const boundaryRole = inferBoundaryRole(filePath);
-  const tryBlockRanges: TryBlockRange[] = [];
   const tryCatchStack: TryCatchEntry[] = [];
+  let functionTryCatchDepth = 0;
 
   const reportOverscopedTryIfNeeded = (node: NodeValue): void => {
     if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {
@@ -575,15 +549,32 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     const node = value;
 
-    // Pre-order hooks
-    if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      // Existing bookkeeping for return-await-policy
-      const block = node.block;
+    // Function scope boundary: isolate try-catch depth for EH-09
+    if (
+      (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
+      isNodeRecord(node)
+    ) {
+      const savedDepth = functionTryCatchDepth;
 
-      if (isOxcNode(block)) {
-        tryBlockRanges.push({ start: block.start, end: block.end });
+      functionTryCatchDepth = 0;
+
+      const entries = Object.entries(node);
+
+      for (const [key, childValue] of entries) {
+        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+          continue;
+        }
+
+        visit(childValue);
       }
 
+      functionTryCatchDepth = savedDepth;
+
+      return;
+    }
+
+    // Pre-order hooks
+    if (node.type === 'TryStatement' && isNodeRecord(node)) {
       reportOverscopedTryIfNeeded(node);
       reportExceptionControlFlowIfNeeded(node);
 
@@ -591,14 +582,39 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       tryCatchStack.push({ hasCatch });
 
+      if (hasCatch) {
+        functionTryCatchDepth++;
+      }
+
       // Visit children in structure order
       visit(node.block);
       visit(node.handler);
       visit(node.finalizer);
 
+      if (hasCatch) {
+        functionTryCatchDepth--;
+      }
+
       tryCatchStack.pop();
 
       return;
+    }
+
+    // EH-09 return-await-policy: return await outside same-function try-catch is redundant
+    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+      const arg = node.argument;
+
+      if (isOxcNode(arg) && arg.type === 'AwaitExpression' && functionTryCatchDepth === 0) {
+        pushFinding(findings, {
+          kind: 'return-await-policy',
+          node,
+          filePath,
+          sourceText,
+          message: 'return await is redundant outside try/catch',
+          evidence: getEvidenceLineAt(sourceText, node.start),
+          recipes: ['RCP-14', 'RCP-15'],
+        });
+      }
     }
 
     if (node.type === 'CatchClause' && isNodeRecord(node)) {
@@ -624,16 +640,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
   };
 
-  // Existing rule set (EH-01..09) still uses walkOxcTree.
+  // Existing rule set (EH-01..08) still uses walkOxcTree.
   walkOxcTree(program, node => {
     // EH-02 unsafe-finally: try/finally that throws/returns in finalizer
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      const block = node.block;
-
-      if (isOxcNode(block)) {
-        tryBlockRanges.push({ start: block.start, end: block.end });
-      }
-
       const finalizer = node.finalizer;
 
       if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
@@ -852,34 +862,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // EH-09 return-await-policy: return await outside boundaries, or outside try/catch in boundaries
-    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
-      const arg = node.argument;
-
-      if (isOxcNode(arg) && arg.type === 'AwaitExpression') {
-        const insideTryBlock = tryBlockRanges.some(
-          r => typeof node.start === 'number' && node.start >= r.start && node.start <= r.end,
-        );
-        const isBoundary = boundaryRole === 'process' || boundaryRole === 'protocol' || boundaryRole === 'worker';
-
-        if (!(isBoundary && insideTryBlock)) {
-          pushFinding(findings, {
-            kind: 'return-await-policy',
-            node,
-            filePath,
-            sourceText,
-            message: 'avoid return await outside boundaries',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: ['RCP-14', 'RCP-15'],
-          });
-        }
-      }
-    }
-
     return true;
   });
 
-  // Run enhanced traversal for EH-10..14 and for nested context.
+  // Run enhanced traversal for EH-09..14 and for nested context.
   visit(program);
 
   return findings;

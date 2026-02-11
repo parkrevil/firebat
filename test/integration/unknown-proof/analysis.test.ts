@@ -6,7 +6,9 @@ import * as path from 'node:path';
 import type { UnknownProofFinding } from '../../../src/types';
 
 import { parseSource } from '../../../src/engine/parse-source';
-import { analyzeUnknownProof, DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS } from '../../../src/features/unknown-proof';
+import { analyzeUnknownProof } from '../../../src/features/unknown-proof';
+
+const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
 
 const writeText = async (filePath: string, text: string): Promise<void> => {
   await mkdir(path.dirname(filePath), { recursive: true });

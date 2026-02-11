@@ -276,7 +276,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-policy when return await is used outside boundaries', () => {
+  it('should report return-await-policy when return await is used outside try/catch', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-await.ts';
@@ -295,7 +295,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report return-await-policy when return await is used in process boundary but outside try', () => {
+  it('should report return-await-policy when return await is used outside try/catch (adapter file)', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/adapters/cli/entry.ts';
@@ -314,7 +314,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report return-await-policy when return await is used in protocol boundary but outside try', () => {
+  it('should report return-await-policy when return await is used outside try/catch (MCP adapter file)', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/adapters/mcp/server.ts';
@@ -333,7 +333,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report return-await-policy when return await is used in worker boundary but outside try', () => {
+  it('should report return-await-policy when return await is used outside try/catch (infrastructure file)', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/infrastructure/tsgo/tsgo-runner.ts';
@@ -352,7 +352,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report return-await-policy when return await is used inside a boundary try/catch', () => {
+  it('should not report return-await-policy when return await is used inside same-function try/catch (adapter file)', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/adapters/cli/entry.ts';
@@ -381,7 +381,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-policy when return await is used inside try/catch outside boundaries', () => {
+  it('should not report return-await-policy when return await is used inside same-function try/catch', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-await-try-non-boundary.ts';
@@ -407,7 +407,40 @@ describe('integration/exception-hygiene', () => {
     let hits = analysis.findings.filter(f => f.kind === 'return-await-policy');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(0);
+  });
+
+  it('should report return-await-policy when return await is in a nested function even if outer has try/catch', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/return-await-cross-scope.ts';
+    let source = [
+      'async function g() {',
+      '  return 1;',
+      '}',
+      '',
+      'export async function outer() {',
+      '  try {',
+      '    const inner = async () => {',
+      '      return await g();',
+      '    };',
+      '    return await inner();',
+      '  } catch (e) {',
+      '    throw e;',
+      '  }',
+      '}',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeExceptionHygiene(program);
+    let hits = analysis.findings.filter(f => f.kind === 'return-await-policy');
+
+    // Assert — inner arrow's return await is NOT inside its own try/catch, should be flagged
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.evidence).toContain('return await g()');
   });
 
   it('should report silent-catch when catch is empty', () => {

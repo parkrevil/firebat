@@ -8,8 +8,6 @@ import type { SourceSpan, UnknownProofFinding } from '../../types';
 import { isNodeRecord, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
-const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
-
 interface BindingCandidate {
   readonly name: string;
   readonly offset: number;
@@ -818,5 +816,5 @@ const stringifyHover = (hover: unknown): string => {
   return collectStringsFromNode(raw).join('\n');
 };
 
-export { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS, collectUnknownProofCandidates, stringifyHover };
+export { collectUnknownProofCandidates, stringifyHover };
 export type { UnknownProofCandidates };

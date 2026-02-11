@@ -99,7 +99,7 @@ All detectors run by default. Use `--only` to select a subset.
 
 ## MCP Integration
 
-firebat exposes 37 tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for AI agent integration.
+firebat exposes a single tool (`scan`) via the [Model Context Protocol](https://modelcontextprotocol.io/) for AI agent integration.
 
 ### Setup
 
@@ -127,14 +127,8 @@ so your AI agent can discover and leverage all firebat tools automatically:
 
 This project uses a firebat MCP server for automated code quality analysis.
 
-### Tool Categories
-- 🔍 Analysis: `scan` (15 detectors), `lint` (oxlint), `find_pattern` (ast-grep structural search)
-- 🧭 Navigation: `get_hover`, `get_definitions`, `find_references`, `trace_symbol`, `parse_imports`, `get_document_symbols`, `get_workspace_symbols`, `get_signature_help`
-- ✏️ Editing: `replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, `rename_symbol`, `delete_symbol`, `format_document`, `get_code_actions`
-- 📇 Indexing: `index_symbols`, `search_symbol_from_index`, `clear_index`, `get_project_overview`
-- 📦 External libs: `index_external_libraries`, `search_external_library_symbols`, `get_available_external_symbols`, `get_typescript_dependencies`
-- 🧠 Memory: `read_memory`, `write_memory`, `list_memories`, `delete_memory`
-- 🛠️ Infra: `list_dir`, `get_diagnostics`, `get_all_diagnostics`, `get_completion`, `check_capabilities`
+### Tools
+- 🔍 Analysis: `scan`
 
 ### Required Rules
 - After any code change, always run `scan` to check for quality regressions.
@@ -142,35 +136,10 @@ This project uses a firebat MCP server for automated code quality analysis.
 
 ### When to Use What
 - After editing code → `scan`
-- Finding a symbol → `index_symbols` → `search_symbol_from_index`
-- Refactoring → `find_references` → `rename_symbol`
-- Searching code patterns → `find_pattern` (ast-grep syntax)
-- Checking types / signatures → `get_hover`
-- Exploring external library APIs → `index_external_libraries` → `search_external_library_symbols`
-- Reviewing analysis results → invoke the `workflow` or `review` prompt
+
 ```
 
 > **Tip:** `firebat install` prints this block automatically so you can copy it right away.
-
-### Key MCP Tools
-
-| Tool | Purpose |
-|------|---------|
-| `scan` | Run analysis with selected detectors, targets, and options |
-| `find_pattern` | Search code using ast-grep structural patterns |
-| `trace_symbol` | Build a reference graph for a symbol |
-| `get_hover` | Get type/hover info at a position (tsgo LSP) |
-| `rename_symbol` | Project-wide rename (tsgo LSP) |
-| `index_symbols` | Index project symbols for fast search |
-| `search_symbol_from_index` | Search indexed symbols by name, kind, or file |
-| `lint` | Run oxlint and return diagnostics |
-
-### Prompts
-
-| Prompt | Description |
-|--------|-------------|
-| `review` | Generate a code review prompt based on scan results |
-| `workflow` | Guidance on effective tool usage patterns |
 
 ## Configuration
 

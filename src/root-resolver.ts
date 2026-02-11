@@ -70,6 +70,17 @@ const resolveParent = (dirAbs: string): string | null => {
   return parent === dirAbs ? null : parent;
 };
 
+const normalizePath = (value: string): string => value.replaceAll('\\', '/');
+
+const isWithinNodeModules = (dirAbs: string): boolean => {
+  const normalized = normalizePath(dirAbs);
+
+  // Handles npm/yarn/pnpm layouts, including:
+  // - <root>/node_modules/firebat
+  // - <root>/node_modules/.pnpm/<...>/node_modules/firebat
+  return normalized.split('/').includes('node_modules');
+};
+
 interface ResolveFirebatRootResult {
   readonly rootAbs: string;
   readonly reason: 'declared-dependency' | 'self-repo';
@@ -85,7 +96,12 @@ const resolveFirebatRootFromCwd = async (startDirAbs: string = process.cwd()): P
       const name = pkg.name ?? '';
 
       if (name === 'firebat') {
-        return { rootAbs: current, reason: 'self-repo' };
+        // If we're executing from within an installed package (node_modules),
+        // don't treat it as the target project root. Keep walking upward to
+        // find the real project that declares firebat as a dependency.
+        if (!isWithinNodeModules(current)) {
+          return { rootAbs: current, reason: 'self-repo' };
+        }
       }
 
       if (hasDepNamed(pkg, 'firebat')) {
@@ -103,7 +119,8 @@ const resolveFirebatRootFromCwd = async (startDirAbs: string = process.cwd()): P
   }
 
   throw new Error(
-    '[firebat] Could not locate a package.json that declares firebat. Run within the package that depends on firebat.',
+    `[firebat] Could not locate a package.json that declares firebat (startDir=${path.resolve(startDirAbs)}). ` +
+      'Run within the package that depends on firebat.',
   );
 };
 

@@ -374,23 +374,16 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
 const AGENT_PROMPT_BLOCK = [
   '## firebat (MCP Code Quality Scanner)',
   '',
-  'Firebat provides both a CLI and an MCP server for code quality analysis and refactoring support.',
+  'Firebat provides both a CLI and an MCP server for code quality analysis.',
   '',
   '### What to do (for your AI agent)',
-  "- Use MCP to discover all available firebat tools and prompts (via your client's MCP tooling or `check_capabilities`).",
   '- Ask the user about their project constraints (stack, CI, coding conventions, risk tolerance).',
-  '- Propose a project-specific workflow that uses firebat to prevent regressions and keep code style consistent.',
-  '- When suggesting or making code changes, validate with the appropriate tools (e.g. `scan`, `lint`, typecheck).',
+  '- Propose a project-specific workflow that uses `scan` to prevent regressions and keep code style consistent.',
+  '- When suggesting or making code changes, validate with `scan`.',
   '- Add the agreed workflow as project-specific agent rules so it stays consistent over time.',
   '',
-  '### Tool Categories (reference)',
-  '- 🔍 Analysis: `scan` (detectors), `lint` (oxlint), `find_pattern` (ast-grep structural search)',
-  '- 🧭 Navigation: `get_hover`, `get_definitions`, `find_references`, `trace_symbol`, `parse_imports`, `get_document_symbols`, `get_workspace_symbols`, `get_signature_help`',
-  '- ✏️ Editing: `replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, `rename_symbol`, `delete_symbol`, `format_document`, `get_code_actions`',
-  '- 📇 Indexing: `index_symbols`, `search_symbol_from_index`, `clear_index`, `get_project_overview`',
-  '- 📦 External libs: `index_external_libraries`, `search_external_library_symbols`, `get_available_external_symbols`, `get_typescript_dependencies`',
-  '- 🧠 Memory: `read_memory`, `write_memory`, `list_memories`, `delete_memory`',
-  '- 🛠️ Infra: `list_dir`, `get_diagnostics`, `get_all_diagnostics`, `get_completion`, `check_capabilities`',
+  '### Tools (reference)',
+  '- 🔍 Analysis: `scan`',
 ].join('\n');
 
 const printAgentPromptGuide = (): void => {
