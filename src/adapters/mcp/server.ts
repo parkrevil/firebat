@@ -1901,6 +1901,14 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await getAvailableExternalSymbolsInFileUseCase({ ...args, root: rootAbs });
 
+      if (structured.ok === false) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
+          structuredContent: toStructured(structured),
+          isError: true,
+        };
+      }
+
       return toToolResult(structured);
     }),
   );
@@ -1924,6 +1932,14 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     safeTool(async (args: z.infer<typeof ParseImportsInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
       const structured = await parseImportsUseCase({ ...args, root: rootAbs });
+
+      if (structured.ok === false) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
+          structuredContent: toStructured(structured),
+          isError: true,
+        };
+      }
 
       return toToolResult(structured);
     }),

@@ -195,18 +195,16 @@ export const replaceRegexUseCase = async (input: ReplaceRegexInput): Promise<Edi
 
   try {
     const prev = await readFile(fileAbs, 'utf8');
-    const re = new RegExp(input.regex, 'gms');
-    const matches = Array.from(prev.matchAll(re));
+    const allRe = new RegExp(input.regex, 'gms');
+    const matches = Array.from(prev.matchAll(allRe));
 
     if (matches.length === 0) {
-      throw new Error('No matches for regex');
+      return { ok: true, filePath: fileAbs, changed: false, matchCount: 0 };
     }
 
-    if (!input.allowMultipleOccurrences && matches.length !== 1) {
-      throw new Error(`Expected exactly 1 match, found ${matches.length}`);
-    }
-
-    const next = prev.replace(re, input.repl);
+    const useGlobal = input.allowMultipleOccurrences === true;
+    const replaceRe = useGlobal ? allRe : new RegExp(input.regex, 'ms');
+    const next = prev.replace(replaceRe, input.repl);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
     if (changed) {

@@ -3,9 +3,13 @@ import * as path from 'node:path';
 
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
-const RENAME_FIXTURE = ['export function oldName(x: number): number { return x; }', '', 'export function other(): void {}'].join(
-  '\n',
-);
+const RENAME_FIXTURE = [
+  'export function targetFn(x: number): number { return x; }',
+  '',
+  'export class RenameMe {}',
+  '',
+  'export function other(): void {}',
+].join('\n');
 let ctx: McpTestContext;
 
 beforeAll(async () => {

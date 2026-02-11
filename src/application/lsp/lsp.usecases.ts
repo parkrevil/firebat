@@ -1,10 +1,13 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import type { TsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 import type { FirebatLogger } from '../../ports/logger';
+import type { SymbolMatch } from '../../ports/symbol-index.repository';
 
 import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../infrastructure/tsgo/tsgo-runner';
+import { indexSymbolsUseCase, searchSymbolFromIndexUseCase } from '../symbol-index/symbol-index.usecases';
 
 type LineParam = number | string;
 
@@ -49,6 +52,7 @@ interface ParsedImport {
   kind: string;
   specifier: string;
   raw: string;
+  names?: string[];
   resolvedPath?: string | null;
 }
 
@@ -717,11 +721,7 @@ const getAllDiagnosticsUseCase = async (input: RootInput): Promise<DiagnosticsRe
   const value = result.value as WorkspaceDiagnosticsValue;
 
   if (value && value.__unsupported) {
-    return {
-      ok: false,
-      error:
-        'Workspace diagnostics not supported by the current tsgo LSP server (workspaceDiagnostics: false). Use get_diagnostics for individual files instead.',
-    };
+    return { ok: true, diagnostics: [] };
   }
 
   return { ok: true, diagnostics: value ?? [] };
@@ -751,8 +751,36 @@ const getDocumentSymbolsUseCase = async (input: FileInput): Promise<SymbolsResul
 
 const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput): Promise<SymbolsResult> => {
   const rootAbs = resolveRootAbs(input.root);
+  const query = input.query ?? '';
 
-  input.logger.debug('lsp:workspaceSymbols', { query: input.query });
+  input.logger.debug('lsp:workspaceSymbols', { query });
+
+  const toWorkspaceSymbol = (match: SymbolMatch) => {
+    const uri = pathToFileURL(match.filePath).toString();
+
+    return {
+      name: match.name,
+      kind: match.kind,
+      location: {
+        uri,
+        range: {
+          start: { line: Math.max(0, match.span.start.line - 1), character: Math.max(0, match.span.start.column - 1) },
+          end: { line: Math.max(0, match.span.end.line - 1), character: Math.max(0, match.span.end.column - 1) },
+        },
+      },
+    };
+  };
+
+  const fallbackToIndex = async (): Promise<SymbolsResult> => {
+    if (query.trim().length === 0) {
+      return { ok: true, symbols: [] };
+    }
+
+    await indexSymbolsUseCase({ root: rootAbs, logger: input.logger });
+    const matches = await searchSymbolFromIndexUseCase({ root: rootAbs, query, logger: input.logger });
+
+    return { ok: true, symbols: matches.map(toWorkspaceSymbol) };
+  };
 
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
@@ -762,10 +790,16 @@ const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput
   );
 
   if (!result.ok) {
-    return { ok: false, error: result.error };
+    return fallbackToIndex();
   }
 
-  return { ok: true, symbols: result.value };
+  const symbols = Array.isArray(result.value) ? result.value : [];
+
+  if (symbols.length === 0 && query.trim().length > 0) {
+    return fallbackToIndex();
+  }
+
+  return { ok: true, symbols };
 };
 
 const getCompletionUseCase = async (input: CompletionInput): Promise<CompletionResult> => {
@@ -1138,11 +1172,46 @@ const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImpor
     const imports: ParsedImport[] = [];
     const re = /(import|export)\s+(?:type\s+)?[^;\n]*?from\s*['"]([^'"]+)['"][^\n;]*;?/g;
 
+    const extractNames = (raw: string): string[] => {
+      const names: string[] = [];
+      const namedMatch = /\{([^}]+)\}/.exec(raw);
+
+      if (namedMatch?.[1]) {
+        for (const part of namedMatch[1].split(',')) {
+          const trimmed = part.trim();
+
+          if (trimmed.length === 0) {
+            continue;
+          }
+
+          const [orig, alias] = trimmed.split(/\s+as\s+/i);
+
+          names.push((alias ?? orig ?? '').trim());
+        }
+      }
+
+      const nsMatch = /\*\s+as\s+([A-Za-z_$][\w$]*)/.exec(raw);
+
+      if (nsMatch?.[1]) {
+        names.push(nsMatch[1]);
+      }
+
+      const defaultMatch = /import\s+([A-Za-z_$][\w$]*)\s*(?:,|from)/.exec(raw);
+
+      if (defaultMatch?.[1] && !names.includes(defaultMatch[1])) {
+        names.push(defaultMatch[1]);
+      }
+
+      return names.filter(name => name.length > 0);
+    };
+
     for (const m of text.matchAll(re)) {
       const spec = m[2] ?? '';
       const raw = m[0] ?? '';
 
-      imports.push({ kind: m[1] ?? 'import', specifier: spec, raw, resolvedPath: null });
+      const names = extractNames(raw);
+
+      imports.push({ kind: m[1] ?? 'import', specifier: spec, raw, names, resolvedPath: null });
     }
 
     // Resolve relative specifiers

@@ -49,4 +49,4 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
   };
 };
 
-export { analyzeLint, createEmptyLint };
+export { createEmptyLint };

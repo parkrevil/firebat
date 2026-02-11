@@ -62,19 +62,20 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
 
   for (const raw of targets) {
     const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
-    // Check if it's a directory
-    const exists = await Bun.file(abs).exists();
+    const stat = await Bun.file(abs).stat().catch(() => null);
 
-    if (exists) {
-      const stat = await Bun.file(abs).stat();
+    if (stat?.isDirectory()) {
+      const files = await scanDirForSourceFiles(abs);
 
-      if (stat.isDirectory()) {
-        const files = await scanDirForSourceFiles(abs);
+      results.push(...files);
 
-        results.push(...files);
+      continue;
+    }
 
-        continue;
-      }
+    if (stat?.isFile()) {
+      results.push(abs);
+
+      continue;
     }
 
     // Glob pattern
@@ -87,8 +88,10 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
       continue;
     }
 
-    // Plain file
-    results.push(abs);
+    // Plain file fallback (only if it exists)
+    if (await Bun.file(abs).exists()) {
+      results.push(abs);
+    }
   }
 
   return uniqueSorted(results);

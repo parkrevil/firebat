@@ -26,6 +26,10 @@ function multiply(a: number, b: number): number {
   return a * b;
 }
 
+export function exportedSample(label: string): string {
+  return `sample:${label}`;
+}
+
 class Calculator {
   value: number = 0;
 
