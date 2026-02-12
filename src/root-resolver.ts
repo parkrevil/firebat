@@ -1,4 +1,3 @@
-import { stat, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as z from 'zod';
 
@@ -20,7 +19,7 @@ const readPackageJson = async (dirAbs: string): Promise<PackageJson | null> => {
   const filePath = path.join(dirAbs, 'package.json');
 
   try {
-    const raw = await readFile(filePath, 'utf8');
+    const raw = await Bun.file(filePath).text();
     const parsed = PackageJsonSchema.safeParse(JSON.parse(raw));
 
     if (!parsed.success) {
@@ -56,7 +55,7 @@ const hasDepNamed = (pkg: PackageJson, depName: string): boolean => {
 
 const isExistingDir = async (dirAbs: string): Promise<boolean> => {
   try {
-    const s = await stat(dirAbs);
+    const s = await Bun.file(dirAbs).stat();
 
     return s.isDirectory();
   } catch {

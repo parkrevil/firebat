@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -10,7 +9,9 @@ import { createPrettyConsoleLogger } from '../../../src/infrastructure/logging/p
 const testLogger = createPrettyConsoleLogger({ level: 'error', includeStack: false });
 
 const sha256Hex = (text: string): string => {
-  return createHash('sha256').update(text).digest('hex');
+  const hasher = new Bun.CryptoHasher('sha256');
+  hasher.update(text);
+  return hasher.digest('hex');
 };
 
 const cloneJson = <T>(value: T): T => {
@@ -81,11 +82,10 @@ const createTmpProjectRoot = async (): Promise<string> => {
   const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-install-update-root-'));
 
   await mkdir(path.join(tmpRootAbs, '.firebat'), { recursive: true });
-  await writeFile(
+  await Bun.write(
     path.join(tmpRootAbs, 'package.json'),
     JSON.stringify({ name: 'firebat-install-update-fixture', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) +
       '\n',
-    'utf8',
   );
 
   return tmpRootAbs;
@@ -421,7 +421,8 @@ test('should delete keys missing from template even if user added them', async (
     const after = asRecordOrThrow(afterRaw, 'Expected updated .firebatrc.jsonc to be an object');
 
     expect(after.__extraRootKey).toBeUndefined();
-    expect(after.features?.__extraFeatureKey).toBeUndefined();
+    const afterFeatures = asRecordOrThrow(after.features, 'Expected updated .firebatrc.jsonc.features to be an object');
+    expect(afterFeatures.__extraFeatureKey).toBeUndefined();
     // Unrelated comment should remain unless update had to rewrite.
     expect(afterText).toContain('// keep me');
   } finally {

@@ -1,6 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import type { TsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 import type { FirebatLogger } from '../../ports/logger';
@@ -463,14 +461,14 @@ const readWithFallback = async (filePath: string): Promise<string> => {
   }
 
   try {
-    return await readFile(filePath, 'utf8');
+    return await Bun.file(filePath).text();
   } catch {
     return '';
   }
 };
 
 const withOpenDocument = async <T>(input: OpenDocumentInput, fn: (doc: OpenedDocument) => Promise<T>): Promise<T> => {
-  const text = await readFile(input.fileAbs, 'utf8');
+  const text = await Bun.file(input.fileAbs).text();
   const { uri } = await openTsDocument({
     lsp: input.lsp,
     filePath: input.fileAbs,
@@ -756,7 +754,7 @@ const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput
   input.logger.debug('lsp:workspaceSymbols', { query });
 
   const toWorkspaceSymbol = (match: SymbolMatch) => {
-    const uri = pathToFileURL(match.filePath).toString();
+    const uri = Bun.pathToFileURL(match.filePath).toString();
 
     return {
       name: match.name,
@@ -888,7 +886,7 @@ const formatDocumentUseCase = async (input: FileInput): Promise<FormatResult> =>
           return { changed: false };
         }
 
-        await writeFile(fileAbs, nextText, 'utf8');
+        await Bun.write(fileAbs, nextText);
 
         return { changed: true };
       });
@@ -969,11 +967,11 @@ const applyWorkspaceEditToDisk = async (edit: WorkspaceEdit): Promise<LspChanged
 
   for (const [uri, edits] of Object.entries(changes)) {
     const filePath = lspUriToFilePath(uri);
-    const prevText = await readFile(filePath, 'utf8');
+    const prevText = await Bun.file(filePath).text();
     const nextText = applyTextEdits(prevText, edits);
 
     if (nextText !== prevText) {
-      await writeFile(filePath, nextText, 'utf8');
+      await Bun.write(filePath, nextText);
       changedFiles.push(filePath);
     }
   }
@@ -1058,7 +1056,7 @@ const deleteSymbolUseCase = async (input: DeleteInput): Promise<DeleteResult> =>
         }
 
         const defPath = lspUriToFilePath(loc.uri);
-        const defText = await readFile(defPath, 'utf8');
+        const defText = await Bun.file(defPath).text();
         // Coarse delete: remove the full lines covered by the definition range.
         const defLines = splitLines(defText);
         const from = Math.max(0, loc.range.start.line);
@@ -1070,7 +1068,7 @@ const deleteSymbolUseCase = async (input: DeleteInput): Promise<DeleteResult> =>
           return { changed: false };
         }
 
-        await writeFile(defPath, nextText, 'utf8');
+        await Bun.write(defPath, nextText);
 
         return { changed: true };
       });
@@ -1113,7 +1111,7 @@ const getAvailableExternalSymbolsInFileUseCase = async (input: ExternalSymbolsIn
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
-    const text = await readFile(fileAbs, 'utf8');
+    const text = await Bun.file(fileAbs).text();
     const lines = splitLines(text);
     const out = new Set<string>();
     // Very small import parser: import { A, B as C } from 'x'
@@ -1169,7 +1167,7 @@ const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImpor
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
-    const text = await readFile(fileAbs, 'utf8');
+    const text = await Bun.file(fileAbs).text();
     const imports: ParsedImport[] = [];
     const re = /(import|export)\s+(?:type\s+)?[^;\n]*?from\s*['"]([^'"]+)['"][^\n;]*;?/g;
 

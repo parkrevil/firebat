@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -12,7 +12,7 @@ const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapte
 
 const writeText = async (filePath: string, text: string): Promise<void> => {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, text, 'utf8');
+  await Bun.write(filePath, text);
 };
 
 interface UnknownProofStatus {

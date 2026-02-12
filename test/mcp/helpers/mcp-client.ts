@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -78,10 +78,9 @@ const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise
   await mkdir(firebatDir, { recursive: true });
 
   // Minimal package.json so firebat recognizes the project root.
-  await writeFile(
+  await Bun.write(
     path.join(tmpRootAbs, 'package.json'),
     JSON.stringify({ name: 'firebat-mcp-test-fixture', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) + '\n',
-    'utf8',
   );
 
   const fixturesAbs = path.join(tmpRootAbs, 'fixtures');
@@ -97,7 +96,7 @@ const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise
       const abs = path.join(tmpRootAbs, relPath);
 
       await mkdir(path.dirname(abs), { recursive: true });
-      await writeFile(abs, content, 'utf8');
+      await Bun.write(abs, content);
     }
   }
 

@@ -1,5 +1,4 @@
 import * as path from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import type { FirebatLogger } from '../../ports/logger';
 
@@ -288,7 +287,7 @@ const acquireSharedTsgoSession = async (input: SharedTsgoSessionInput): Promise<
   const lsp = await LspConnection.start({ cwd, command: resolved.command, args: resolved.args });
 
   try {
-    const rootUri = pathToFileURL(cwd).toString();
+    const rootUri = Bun.pathToFileURL(cwd).toString();
     const initializeResult = await lsp.request('initialize', {
       processId: null,
       rootUri,
@@ -360,7 +359,7 @@ const runInSharedTsgoSession = async <T>(
 
 const fileUrlToPathSafe = (uri: string): string => {
   try {
-    return fileURLToPath(uri);
+    return Bun.fileURLToPath(new URL(uri));
   } catch {
     return uri.replace(/^file:\/\//, '');
   }
@@ -460,9 +459,59 @@ const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<
 
 const buildLspMessage = (payload: unknown): Uint8Array => {
   const json = JSON.stringify(payload);
-  const header = `Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n`;
+  const encoder = new TextEncoder();
+  const jsonBytes = encoder.encode(json);
+  const headerBytes = encoder.encode(`Content-Length: ${jsonBytes.length}\r\n\r\n`);
+  const out = new Uint8Array(headerBytes.length + jsonBytes.length);
 
-  return new TextEncoder().encode(header + json);
+  out.set(headerBytes, 0);
+  out.set(jsonBytes, headerBytes.length);
+
+  return out;
+};
+
+const indexOfBytes = (haystack: Uint8Array, needle: Uint8Array): number => {
+  if (needle.length === 0) {
+    return 0;
+  }
+
+  if (haystack.length < needle.length) {
+    return -1;
+  }
+
+  const limit = haystack.length - needle.length;
+
+  for (let i = 0; i <= limit; i += 1) {
+    let ok = true;
+
+    for (let j = 0; j < needle.length; j += 1) {
+      if (haystack[i + j] !== needle[j]) {
+        ok = false;
+        break;
+      }
+    }
+
+    if (ok) {
+      return i;
+    }
+  }
+
+  return -1;
+};
+
+const concatBytes = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+  if (a.length === 0) {
+    return b;
+  }
+
+  if (b.length === 0) {
+    return a;
+  }
+
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
 };
 
 class LspConnection {
@@ -737,7 +786,9 @@ class LspConnection {
 
     const stream = this.proc.stdout as ReadableStream<Uint8Array>;
     const reader = stream.getReader();
-    let buffer = Buffer.alloc(0);
+    const decoder = new TextDecoder();
+    const headerDelimiter = new Uint8Array([13, 10, 13, 10]);
+    let buffer = new Uint8Array(0);
 
     const readMore = async (): Promise<boolean> => {
       const { value, done } = await reader.read();
@@ -746,24 +797,24 @@ class LspConnection {
         return false;
       }
 
-      buffer = Buffer.concat([buffer, Buffer.from(value)]);
+      buffer = concatBytes(buffer, value ?? new Uint8Array(0));
 
       return true;
     };
 
     const parseOne = (): unknown | null => {
-      const headerEnd = buffer.indexOf('\r\n\r\n');
+      const headerEnd = indexOfBytes(buffer, headerDelimiter);
 
       if (headerEnd === -1) {
         return null;
       }
 
-      const header = buffer.subarray(0, headerEnd).toString('utf8');
+      const header = decoder.decode(buffer.subarray(0, headerEnd));
       const m = /Content-Length:\s*(\d+)/i.exec(header);
 
       if (!m) {
         // Can't parse header; drop until after headerEnd.
-        buffer = Buffer.from(buffer.subarray(headerEnd + 4));
+        buffer = buffer.subarray(headerEnd + 4);
 
         return null;
       }
@@ -775,9 +826,9 @@ class LspConnection {
         return null;
       }
 
-      const body = buffer.subarray(bodyStart, bodyStart + len).toString('utf8');
+      const body = decoder.decode(buffer.subarray(bodyStart, bodyStart + len));
 
-      buffer = Buffer.from(buffer.subarray(bodyStart + len));
+      buffer = buffer.subarray(bodyStart + len);
 
       try {
         return JSON.parse(body);
@@ -926,8 +977,8 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
     const lsp = await LspConnection.start({ cwd, command: resolved.command, args: resolved.args });
 
     try {
-      const rootUri = pathToFileURL(cwd).toString();
-      const entryUri = pathToFileURL(entryFile).toString();
+      const rootUri = Bun.pathToFileURL(cwd).toString();
+      const entryUri = Bun.pathToFileURL(entryFile).toString();
 
       await lsp.request('initialize', {
         processId: null,
@@ -1135,7 +1186,7 @@ export const withTsgoLspSession = async <T>(
 
 export const openTsDocument = async (input: OpenTsDocumentInput): Promise<OpenTsDocumentResult> => {
   const text = input.text ?? (await readFileText(input.filePath));
-  const uri = pathToFileURL(input.filePath).toString();
+  const uri = Bun.pathToFileURL(input.filePath).toString();
 
   await input.lsp.notify('textDocument/didOpen', {
     textDocument: {

@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -32,10 +32,9 @@ export const createInMemoryMcpContext = async (): Promise<InMemoryMcpContext> =>
 
   await mkdir(firebatDir, { recursive: true });
 
-  await writeFile(
+  await Bun.write(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({ name: 'firebat-inmemory-test', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) + '\n',
-    'utf8',
   );
 
   const logger = createNoopLogger();

@@ -1,6 +1,8 @@
 import type { ParsedFile } from './engine/types';
 import type { FirebatProgramConfig } from './interfaces';
 
+import { parseSource } from './engine/parse-source';
+
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const shouldIncludeFile = (filePath: string): boolean => {
@@ -68,6 +70,31 @@ const isParseWorkerResponse = (value: unknown): value is ParseWorkerResponse => 
 
 const isParseWorkerOk = (value: ParseWorkerResponse): value is ParseWorkerResponseOk => value.ok === true;
 
+const formatUnknownError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object') {
+    const maybeMessage = (error as { message?: unknown }).message;
+    const maybeError = (error as { error?: unknown }).error;
+
+    if (typeof maybeMessage === 'string' && maybeMessage.length > 0) {
+      return maybeMessage;
+    }
+
+    if (typeof maybeError === 'string' && maybeError.length > 0) {
+      return maybeError;
+    }
+  }
+
+  return String(error);
+};
+
+const createParseWorker = (): Worker => {
+  return new Worker(new URL('./workers/parse-worker.js', import.meta.url), { type: 'module' });
+};
+
 // Replaces createFirebatProgram to return ParsedFile[]
 export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   const fileNames = config.targets;
@@ -97,31 +124,6 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
     return [];
   }
 
-  const workerSource = `
-    import { parseSync } from "oxc-parser";
-    declare var self: Worker;
-
-    self.onmessage = async (event: MessageEvent) => {
-      const filePath = (event as any)?.data?.filePath;
-      if (typeof filePath !== "string" || filePath.length === 0) {
-        postMessage({ ok: false, filePath: String(filePath ?? ""), error: "invalid filePath" });
-        return;
-      }
-
-      try {
-        const sourceText = await Bun.file(filePath).text();
-        const parsed = parseSync(filePath, sourceText);
-
-        // NOTE: parsed.comments is not structured-cloneable in Bun workers.
-        postMessage({ ok: true, filePath, sourceText, program: parsed.program, errors: parsed.errors });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        postMessage({ ok: false, filePath, error: message });
-      }
-    };
-  `;
-  const workerFile = new File([workerSource], 'firebat-parse-worker.ts', { type: 'text/javascript' });
-  const workerUrl = URL.createObjectURL(workerFile);
   const workerCount = Math.max(1, Math.min(hardware, eligible.length));
   const workers: Worker[] = [];
 
@@ -133,11 +135,23 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
   try {
     for (let i = 0; i < workerCount; i += 1) {
-      workers.push(new Worker(workerUrl));
+      workers.push(createParseWorker());
     }
 
     const resultsByIndex: Array<ParsedFile | undefined> = new Array<ParsedFile | undefined>(fileNames.length);
     let cursor = 0;
+
+    const parseWithFallback = async (filePath: string, reason: string): Promise<ParsedFile | null> => {
+      try {
+        const sourceText = await Bun.file(filePath).text();
+
+        return parseSource(filePath, sourceText);
+      } catch (error) {
+        config.logger.warn('Parse fallback failed', { filePath, reason, error: formatUnknownError(error) });
+
+        return null;
+      }
+    };
 
     const requestParse = async (worker: Worker, filePath: string): Promise<ParseWorkerResponse> => {
       return new Promise((resolve, reject) => {
@@ -186,6 +200,13 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
                 isParseWorkerResponse(data) && typeof (data as ParseWorkerResponseFail).error === 'string'
                   ? (data as ParseWorkerResponseFail).error
                   : 'unknown error';
+              const fallback = await parseWithFallback(item.filePath, `worker-response:${errText}`);
+
+              if (fallback) {
+                resultsByIndex[item.index] = { ...fallback, comments: [] };
+
+                continue;
+              }
 
               config.logger.warn('Parse failed', { filePath: item.filePath, error: errText });
 
@@ -200,7 +221,14 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
               sourceText: typeof data.sourceText === 'string' ? data.sourceText : '',
             };
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = formatUnknownError(error);
+            const fallback = await parseWithFallback(item.filePath, `worker-error:${message}`);
+
+            if (fallback) {
+              resultsByIndex[item.index] = { ...fallback, comments: [] };
+
+              continue;
+            }
 
             config.logger.warn('Parse failed', { filePath: item.filePath, error: message }, error);
           }
@@ -222,12 +250,6 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       } catch {
         // ignore
       }
-    }
-
-    try {
-      URL.revokeObjectURL(workerUrl);
-    } catch {
-      // ignore
     }
   }
 };

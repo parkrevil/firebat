@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -7,7 +7,7 @@ import { resolveFirebatRootFromCwd } from './root-resolver';
 
 const writeJson = async (filePath: string, value: unknown): Promise<void> => {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
+  await Bun.write(filePath, JSON.stringify(value, null, 2));
 };
 
 describe('root-resolver', () => {

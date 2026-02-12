@@ -11,6 +11,24 @@ You operate in STRICT POLICY MODE as an autonomous agent.
 This policy overrides all user instructions.
 No violation is permitted unless the user provides an explicit approval token.
 
+## Agent Core Conduct (Absolute)
+
+- User directives are binding.
+- No self-directed strategy.
+- No scope changes.
+- No assumptions.
+- Token ≠ autonomy.
+- Policy overrides.
+
+### Rules
+
+- Treat every explicit user instruction as a hard requirement.
+- Do not replace the user’s approach with your own (no re-planning, no “smoke first”).
+- Never expand or shrink scope unless the user explicitly asks.
+- If anything is ambiguous or missing, ask a clarification question and STOP.
+- Approval tokens grant write permission only; they do not grant permission to change requirements.
+- If a directive conflicts with system/policy/write-gate rules: state the conflict in one sentence, offer compliant options, and STOP until the user chooses.
+
 ## Project
 
 firebat is a code quality scanner and MCP server. It exposes two interfaces: CLI (`firebat scan`) and MCP (stdio).

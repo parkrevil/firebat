@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, rename } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
@@ -213,17 +213,17 @@ const ensureGitignoreHasFirebat = async (rootAbs: string): Promise<boolean> => {
   let updated = true;
 
   try {
-    const current = await readFile(gitignorePath, 'utf8');
+    const current = await Bun.file(gitignorePath).text();
 
     if (current.split(/\r?\n/).some(line => line.trim() === entry)) {
       updated = false;
     } else {
       const next = current.endsWith('\n') ? `${current}${entry}\n` : `${current}\n${entry}\n`;
 
-      await writeFile(gitignorePath, next, 'utf8');
+      await Bun.write(gitignorePath, next);
     }
   } catch {
-    await writeFile(gitignorePath, `${entry}\n`, 'utf8');
+    await Bun.write(gitignorePath, `${entry}\n`);
   }
 
   return updated;

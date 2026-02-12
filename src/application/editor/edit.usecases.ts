@@ -1,4 +1,3 @@
-import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
@@ -140,7 +139,7 @@ const writeIfChanged = async (filePath: string, prevText: string, nextText: stri
     return false;
   }
 
-  await writeFile(filePath, nextText, 'utf8');
+  await Bun.write(filePath, nextText);
 
   return true;
 };
@@ -160,7 +159,7 @@ export const replaceRangeUseCase = async (input: ReplaceRangeInput): Promise<Edi
   input.logger.debug('edit:replaceRange', { filePath: input.relativePath, startLine: input.startLine, endLine: input.endLine });
 
   try {
-    const prev = await readFile(fileAbs, 'utf8');
+    const prev = await Bun.file(fileAbs).text();
     const start: SourcePosition = { line: input.startLine, column: Math.max(0, input.startColumn - 1) };
     const end: SourcePosition = { line: input.endLine, column: Math.max(0, input.endColumn - 1) };
     const startOff = posToOffset(prev, start);
@@ -194,7 +193,7 @@ export const replaceRegexUseCase = async (input: ReplaceRegexInput): Promise<Edi
   input.logger.debug('edit:replaceRegex', { filePath: input.relativePath, regex: input.regex });
 
   try {
-    const prev = await readFile(fileAbs, 'utf8');
+    const prev = await Bun.file(fileAbs).text();
     const allRe = new RegExp(input.regex, 'gms');
     const matches = Array.from(prev.matchAll(allRe));
 
@@ -228,7 +227,7 @@ export const insertBeforeSymbolUseCase = async (input: InsertBeforeSymbolInput):
   input.logger.debug('edit:insertBefore', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
-    const prev = await readFile(fileAbs, 'utf8');
+    const prev = await Bun.file(fileAbs).text();
     const parsed = parseSource(fileAbs, prev);
     const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
@@ -265,7 +264,7 @@ export const insertAfterSymbolUseCase = async (input: InsertAfterSymbolInput): P
   input.logger.debug('edit:insertAfter', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
-    const prev = await readFile(fileAbs, 'utf8');
+    const prev = await Bun.file(fileAbs).text();
     const parsed = parseSource(fileAbs, prev);
     const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
@@ -300,7 +299,7 @@ export const replaceSymbolBodyUseCase = async (input: ReplaceSymbolBodyInput): P
   input.logger.debug('edit:replaceSymbolBody', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
-    const prev = await readFile(fileAbs, 'utf8');
+    const prev = await Bun.file(fileAbs).text();
     const parsed = parseSource(fileAbs, prev);
     const symbols = extractSymbolsOxc(parsed);
     const sym = findByNamePath(symbols, input.namePath);
