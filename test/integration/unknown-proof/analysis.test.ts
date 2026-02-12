@@ -144,7 +144,7 @@ describe('integration/unknown-proof', () => {
     await rm(rootAbs, { recursive: true, force: true });
   });
 
-  it('should report type assertions anywhere', async () => {
+  it('should report type assertions when any assertion syntax is used', async () => {
     // Arrange
     const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
     const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
@@ -177,7 +177,198 @@ describe('integration/unknown-proof', () => {
     await rm(rootAbs, { recursive: true, force: true });
   });
 
-  it('should report any inferred outside boundary files (tsgo proof)', async () => {
+  it('should report type assertions when angle-bracket assertion syntax is used', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'bad-angle.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      ['export function badAngle() {', '  const x = (<unknown>1);', '  return x;', '}'].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+    });
+
+    // Assert
+    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should skip const assertions when reporting type assertions', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'safe.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      ['export function safe() {', '  const value = { a: 1 } as const;', '  return value;', '}'].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+    });
+
+    // Assert
+    assertOkOrToolUnavailable(analysis, () =>
+      analysis.findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'),
+    );
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should still report type assertions when const assertions are wrapped by an outer assertion', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'wrapped.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      [
+        'export function wrapped() {',
+        '  const value = ({ a: 1 } as const) as unknown;',
+        '  return value;',
+        '}',
+      ].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+    });
+
+    // Assert
+    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should report unknown-type findings when explicit unknown appears outside boundary files', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'unknown.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      ['export function unknownCase() {', '  const value: unknown = 1;', '  return value;', '}'].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+    });
+
+    // Assert
+    assertOkOrUnavailable(analysis);
+    assertOkOrToolUnavailable(analysis, () => analysis.findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type'));
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should not report unknown-type findings when explicit unknown appears in boundary files', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'adapters', 'unknown.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      ['export function unknownBoundary(value: unknown) {', '  return value;', '}'].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+    });
+
+    // Assert
+    assertOkOrUnavailable(analysis);
+    assertOkOrToolUnavailable(analysis, () => analysis.findings.every((f: UnknownProofFinding) => f.kind !== 'unknown-type'));
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should report any inferred when files are outside boundary (tsgo proof)', async () => {
     // Arrange
     const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
     const tsconfigPath = path.join(rootAbs, 'tsconfig.json');

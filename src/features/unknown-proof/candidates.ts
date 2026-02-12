@@ -622,8 +622,20 @@ const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput
     };
 
     walkOxcTree(file.program as Node, (node: Node) => {
-      // Ban type assertions everywhere.
+      // Ban type assertions everywhere, except const assertions.
       if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
+        if (node.type === 'TSAsExpression') {
+          const typeAnn = isNodeRecord(node) ? node.typeAnnotation : undefined;
+
+          if (isNodeRecord(typeAnn) && typeAnn.type === 'TSTypeReference') {
+            const typeName = typeAnn.typeName;
+
+            if (isNodeRecord(typeName) && typeName.type === 'Identifier' && typeName.name === 'const') {
+              return true;
+            }
+          }
+        }
+
         pushTypeAssertion(node, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
 
         return true;

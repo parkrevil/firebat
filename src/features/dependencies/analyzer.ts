@@ -181,53 +181,164 @@ const recordCyclePath = (cycleKeys: Set<string>, cycles: string[][], path: Reado
   cycles.push(normalized);
 };
 
-const walkCycles = (
-  node: string,
-  adjacency: Map<string, ReadonlyArray<string>>,
-  visited: Set<string>,
-  inStack: Set<string>,
-  stack: string[],
-  cycleKeys: Set<string>,
-  cycles: string[][],
-): void => {
-  if (inStack.has(node)) {
-    const index = stack.indexOf(node);
+interface SccResult {
+  readonly components: ReadonlyArray<ReadonlyArray<string>>;
+}
 
-    if (index >= 0) {
-      recordCyclePath(cycleKeys, cycles, stack.slice(index).concat(node));
+const tarjanScc = (graph: Map<string, ReadonlyArray<string>>): SccResult => {
+  let index = 0;
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const indices = new Map<string, number>();
+  const lowlinks = new Map<string, number>();
+  const components: string[][] = [];
+
+  const strongConnect = (node: string): void => {
+    indices.set(node, index);
+    lowlinks.set(node, index);
+    index += 1;
+    stack.push(node);
+    onStack.add(node);
+
+    for (const next of graph.get(node) ?? []) {
+      if (!indices.has(next)) {
+        strongConnect(next);
+        lowlinks.set(node, Math.min(lowlinks.get(node) ?? 0, lowlinks.get(next) ?? 0));
+      } else if (onStack.has(next)) {
+        lowlinks.set(node, Math.min(lowlinks.get(node) ?? 0, indices.get(next) ?? 0));
+      }
     }
 
-    return;
+    if (lowlinks.get(node) === indices.get(node)) {
+      const component: string[] = [];
+      let current = '';
+
+      do {
+        current = stack.pop() ?? '';
+        onStack.delete(current);
+        component.push(current);
+      } while (current !== node && stack.length > 0);
+
+      components.push(component);
+    }
+  };
+
+  for (const node of graph.keys()) {
+    if (!indices.has(node)) {
+      strongConnect(node);
+    }
   }
 
-  if (visited.has(node)) {
-    return;
+  return { components };
+};
+
+const johnsonCircuits = (
+  scc: ReadonlyArray<string>,
+  adjacency: Map<string, ReadonlyArray<string>>,
+  maxCircuits: number,
+): string[][] => {
+  const cycles: string[][] = [];
+  const cycleKeys = new Set<string>();
+  const nodes = [...scc].sort(compareStrings);
+
+  const unblock = (node: string, blocked: Set<string>, blockMap: Map<string, Set<string>>): void => {
+    blocked.delete(node);
+
+    const blockedBy = blockMap.get(node);
+
+    if (!blockedBy) {
+      return;
+    }
+
+    for (const entry of blockedBy) {
+      if (blocked.has(entry)) {
+        unblock(entry, blocked, blockMap);
+      }
+    }
+
+    blockedBy.clear();
+  };
+
+  for (let index = 0; index < nodes.length && cycles.length < maxCircuits; index += 1) {
+    const start = nodes[index] ?? '';
+    const allowed = new Set(nodes.slice(index));
+    const blocked = new Set<string>();
+    const blockMap = new Map<string, Set<string>>();
+    const stack: string[] = [];
+    const neighbors = (value: string): ReadonlyArray<string> =>
+      (adjacency.get(value) ?? []).filter(entry => allowed.has(entry));
+
+    const circuit = (node: string): boolean => {
+      if (cycles.length >= maxCircuits) {
+        return true;
+      }
+
+      let found = false;
+
+      stack.push(node);
+      blocked.add(node);
+
+      for (const next of neighbors(node)) {
+        if (cycles.length >= maxCircuits) {
+          break;
+        }
+
+        if (next === start) {
+          recordCyclePath(cycleKeys, cycles, stack.concat(start));
+          found = true;
+        } else if (!blocked.has(next)) {
+          if (circuit(next)) {
+            found = true;
+          }
+        }
+      }
+
+      if (found) {
+        unblock(node, blocked, blockMap);
+      } else {
+        for (const next of neighbors(node)) {
+          const blockedBy = blockMap.get(next) ?? new Set<string>();
+          blockedBy.add(node);
+          blockMap.set(next, blockedBy);
+        }
+      }
+
+      stack.pop();
+      return found;
+    };
+
+    circuit(start);
   }
 
-  visited.add(node);
-  inStack.add(node);
-  stack.push(node);
-
-  const next = adjacency.get(node) ?? [];
-
-  for (const entry of next) {
-    walkCycles(entry, adjacency, visited, inStack, stack, cycleKeys, cycles);
-  }
-
-  stack.pop();
-  inStack.delete(node);
+  return cycles;
 };
 
 const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyArray<ReadonlyArray<string>> => {
-  const nodes = Array.from(adjacency.keys()).sort(compareStrings);
-  const visited = new Set<string>();
-  const inStack = new Set<string>();
-  const stack: string[] = [];
+  const { components } = tarjanScc(adjacency);
   const cycles: string[][] = [];
   const cycleKeys = new Set<string>();
 
-  for (const node of nodes) {
-    walkCycles(node, adjacency, visited, inStack, stack, cycleKeys, cycles);
+  for (const component of components) {
+    if (component.length === 0) {
+      continue;
+    }
+
+    if (component.length === 1) {
+      const node = component[0] ?? '';
+      const next = adjacency.get(node) ?? [];
+
+      if (next.includes(node)) {
+        recordCyclePath(cycleKeys, cycles, [node, node]);
+      }
+
+      continue;
+    }
+
+    const circuits = johnsonCircuits(component, adjacency, 100);
+
+    for (const circuit of circuits) {
+      recordCyclePath(cycleKeys, cycles, circuit);
+    }
   }
 
   return cycles;

@@ -84,4 +84,46 @@ describe('integration/exact-duplicates', () => {
     // Assert
     expect(groups.length).toBe(0);
   });
+
+  it('should avoid grouping when literal separators could collide', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/dup-detector/one.ts',
+      ['export function alpha() {', '  return format("a|b", "c");', '}'].join('\n'),
+    );
+    sources.set(
+      '/virtual/dup-detector/two.ts',
+      ['export function beta() {', '  return format("a", "b|c");', '}'].join('\n'),
+    );
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let groups = detectExactDuplicates(program, 1);
+
+    // Assert
+    expect(groups.length).toBe(0);
+  });
+
+  it('should avoid grouping when literals contain NUL characters', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/dup-detector/one.ts',
+      ['export function alpha() {', '  return format("a\\0b", "c");', '}'].join('\n'),
+    );
+    sources.set(
+      '/virtual/dup-detector/two.ts',
+      ['export function beta() {', '  return format("a", "b\\0c");', '}'].join('\n'),
+    );
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let groups = detectExactDuplicates(program, 1);
+
+    // Assert
+    expect(groups.length).toBe(0);
+  });
 });

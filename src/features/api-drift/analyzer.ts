@@ -103,15 +103,20 @@ const buildShape = (node: Node): ApiDriftShape => {
     }
   }
 
-  const bodyValue = node.body as NodeValue | undefined;
-  const [hasReturn, hasReturnValue] = collectReturnStats(bodyValue, node);
   const asyncFlag = typeof node.async === 'boolean' ? node.async : false;
   let returnKind = 'implicit-void';
+  const bodyValue = node.body as NodeValue | undefined;
 
-  if (hasReturnValue) {
+  if (isOxcNode(bodyValue) && bodyValue.type !== 'BlockStatement') {
     returnKind = 'value';
-  } else if (hasReturn) {
-    returnKind = 'void';
+  } else {
+    const [hasReturn, hasReturnValue] = collectReturnStats(bodyValue, node);
+
+    if (hasReturnValue) {
+      returnKind = 'value';
+    } else if (hasReturn) {
+      returnKind = 'void';
+    }
   }
 
   return {

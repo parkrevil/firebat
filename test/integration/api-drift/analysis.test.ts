@@ -80,4 +80,90 @@ describe('integration/api-drift', () => {
     expect(analysis.groups.length).toBe(1);
     expect(analysis.groups[0]?.outliers.length).toBeGreaterThan(0);
   });
+
+  it('should avoid drift when arrow bodies return a value expression', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/api-drift/one.ts', `export const handle = (value) => value + 1;`);
+    sources.set('/virtual/api-drift/two.ts', `export const handle = (value) => {\n  return value + 1;\n};`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeApiDrift(program);
+
+    // Assert
+    expect(analysis.groups.length).toBe(0);
+  });
+
+  it('should avoid drift when arrow bodies return an object literal expression', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/api-drift/one.ts', `export const handle = (value) => ({ key: value });`);
+    sources.set('/virtual/api-drift/two.ts', `export const handle = (value) => {\n  return { key: value };\n};`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeApiDrift(program);
+
+    // Assert
+    expect(analysis.groups.length).toBe(0);
+  });
+
+  it('should avoid drift when arrow bodies return a void expression explicitly', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/api-drift/one.ts', `export const handle = () => void 0;`);
+    sources.set('/virtual/api-drift/two.ts', `export const handle = () => {\n  return void 0;\n};`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeApiDrift(program);
+
+    // Assert
+    expect(analysis.groups.length).toBe(0);
+  });
+
+  it('should ignore nested function return statements when building return kind', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/api-drift/one.ts',
+      [
+        'export function handle() {',
+        '  const inner = () => {',
+        '    return 1;',
+        '  };',
+        '  void inner;',
+        '}',
+      ].join('\n'),
+    );
+    sources.set('/virtual/api-drift/two.ts', `export function handle() {\n  const value = 1;\n  void value;\n}`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeApiDrift(program);
+
+    // Assert
+    expect(analysis.groups.length).toBe(0);
+  });
+
+  it('should detect drift when TypeScript optional parameters differ', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/api-drift/one.ts', `export function handle(value: number, flag?: boolean) {\n  return value;\n}`);
+    sources.set('/virtual/api-drift/two.ts', `export function handle(value: number, flag: boolean) {\n  return value;\n}`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeApiDrift(program);
+
+    // Assert
+    expect(analysis.groups.length).toBe(1);
+    expect(analysis.groups[0]?.outliers.length).toBeGreaterThan(0);
+  });
 });

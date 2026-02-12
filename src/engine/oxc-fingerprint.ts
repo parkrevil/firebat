@@ -137,7 +137,9 @@ const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean
 
   visit(node);
 
-  return hashString(diffs.join('|'));
+  const encoded = diffs.map(entry => `${entry.length}:${entry}`).join('');
+
+  return hashString(encoded);
 };
 
 export const createOxcFingerprint = (node: NodeValue): string => createOxcFingerprintCore(node, true);
