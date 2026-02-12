@@ -10,17 +10,12 @@ describe('integration/waste/destructured-params', () => {
 
     sources.set(
       '/virtual/waste/destructured-params.ts',
-      [
-        'export function render({ title, description, unused }) {',
-        '  return `${title}:${description}`;',
-        '}',
-      ].join('\n'),
+      ['export function render({ title, description, unused }) {', '  return `${title}:${description}`;', '}'].join('\n'),
     );
 
     // Act
     const program = createProgramFromMap(sources);
     const findings = detectWaste(program);
-
     // Assert
     const unusedFindings = findings.filter(f => f.label === 'unused');
 

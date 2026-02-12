@@ -10,6 +10,7 @@ describe('integration/format/config-missing', () => {
 
     try {
       const childAbs = path.join(parent.rootAbs, 'child');
+
       await writeText(path.join(parent.rootAbs, '.oxfmtrc.jsonc'), '{ /* parent */ }');
       await writeText(path.join(childAbs, 'placeholder.txt'), 'ok');
 

@@ -6,9 +6,7 @@ import { createProgramFromMap } from '../shared/test-kit';
 
 const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => {
   const normalized =
-    cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1]
-      ? cycle.path.slice(0, -1)
-      : [...cycle.path];
+    cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1] ? cycle.path.slice(0, -1) : [...cycle.path];
 
   return normalized
     .map(entry => path.basename(entry))

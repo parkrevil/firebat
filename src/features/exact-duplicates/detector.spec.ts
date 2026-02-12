@@ -94,8 +94,14 @@ describe('detector', () => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set('/virtual/types-a.ts', ['export type Alpha = { value: string };', 'export interface Gamma { value: string; }'].join('\n'));
-    sources.set('/virtual/types-b.ts', ['export type Alpha = { value: string };', 'export interface Gamma { value: string; }'].join('\n'));
+    sources.set(
+      '/virtual/types-a.ts',
+      ['export type Alpha = { value: string };', 'export interface Gamma { value: string; }'].join('\n'),
+    );
+    sources.set(
+      '/virtual/types-b.ts',
+      ['export type Alpha = { value: string };', 'export interface Gamma { value: string; }'].join('\n'),
+    );
 
     let program = createProgram(sources);
     // Act

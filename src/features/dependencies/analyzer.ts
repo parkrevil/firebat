@@ -215,12 +215,15 @@ const collectExportStats = (
 
     if (decl.type === 'TSInterfaceDeclaration') {
       record('interface');
+
       return;
     }
 
     if (decl.type === 'ClassDeclaration') {
       const abstractFlag = !!(decl as unknown as { abstract?: unknown }).abstract;
+
       record(abstractFlag ? 'abstract-class' : 'other');
+
       return;
     }
 
@@ -245,6 +248,7 @@ const collectExportStats = (
 
       if (declaration != null) {
         recordDeclaration(declaration);
+
         continue;
       }
 
@@ -264,6 +268,7 @@ const collectExportStats = (
 
         if (typeof localName !== 'string' || localName.trim().length === 0) {
           record('other');
+
           continue;
         }
 
@@ -281,6 +286,7 @@ const collectExportStats = (
 
     if (stmt.type === 'ExportDefaultDeclaration') {
       const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
+
       recordDeclaration(declaration);
     }
   }
@@ -342,7 +348,9 @@ const tarjanScc = (graph: Map<string, ReadonlyArray<string>>): SccResult => {
   const strongConnect = (node: string): void => {
     indices.set(node, index);
     lowlinks.set(node, index);
+
     index += 1;
+
     stack.push(node);
     onStack.add(node);
 
@@ -361,6 +369,7 @@ const tarjanScc = (graph: Map<string, ReadonlyArray<string>>): SccResult => {
 
       do {
         current = stack.pop() ?? '';
+
         onStack.delete(current);
         component.push(current);
       } while (current !== node && stack.length > 0);
@@ -411,8 +420,8 @@ const johnsonCircuits = (
     const blocked = new Set<string>();
     const blockMap = new Map<string, Set<string>>();
     const stack: string[] = [];
-    const neighbors = (value: string): ReadonlyArray<string> =>
-      (adjacency.get(value) ?? []).filter(entry => allowed.has(entry));
+
+    const neighbors = (value: string): ReadonlyArray<string> => (adjacency.get(value) ?? []).filter(entry => allowed.has(entry));
 
     const circuit = (node: string): boolean => {
       if (cycles.length >= maxCircuits) {
@@ -431,6 +440,7 @@ const johnsonCircuits = (
 
         if (next === start) {
           recordCyclePath(cycleKeys, cycles, stack.concat(start));
+
           found = true;
         } else if (!blocked.has(next)) {
           if (circuit(next)) {
@@ -444,12 +454,14 @@ const johnsonCircuits = (
       } else {
         for (const next of neighbors(node)) {
           const blockedBy = blockMap.get(next) ?? new Set<string>();
+
           blockedBy.add(node);
           blockMap.set(next, blockedBy);
         }
       }
 
       stack.pop();
+
       return found;
     };
 
@@ -559,6 +571,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
 
   for (const [from, targets] of adjacency.entries()) {
     adjacencyOut[toRelativePath(from)] = targets.map(toRelativePath);
+
     outDegree.set(from, targets.length);
 
     if (!inDegree.has(from)) {
@@ -580,6 +593,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
 
   for (const file of files) {
     const key = toRelativePath(normalizePath(file.filePath));
+
     exportStats[key] = collectExportStats(file);
   }
 

@@ -76,4 +76,3 @@ describe('integration/coupling', () => {
     expect(names[0]).toBe(sortedNames[0]);
   });
 });
-

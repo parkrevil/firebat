@@ -8,7 +8,6 @@ describe('integration/coupling/god-module', () => {
   it('should use a dynamic threshold based on total module count', () => {
     // Arrange
     const sources = new Map<string, string>();
-
     const totalModules = 200;
     const threshold = Math.max(10, Math.ceil(totalModules * 0.1));
     const fan = threshold + 1;
@@ -30,6 +29,7 @@ describe('integration/coupling/god-module', () => {
     }
 
     const coreImports = Array.from({ length: fan }, (_, index) => `import './m${index}';`).join('\n');
+
     sources.set('/virtual/coupling/god/core.ts', `${coreImports}\nexport const core = 1;`);
 
     // Act

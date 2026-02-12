@@ -42,6 +42,7 @@ describe('integration/coupling/distance', () => {
     }
 
     const outImports = Array.from({ length: outCount }, (_, index) => `import './out${index}';`).join('\n');
+
     sources.set(
       '/virtual/coupling/distance/useless.ts',
       `${outImports}\nexport interface IService { get(): string }\nexport abstract class Base { abstract run(): void }`,

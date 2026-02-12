@@ -4,12 +4,7 @@ import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../shared/test-kit';
 
 const createArrowFunction = (exportName: string, literal: number): string => {
-  return [
-    `export const ${exportName} = () => {`,
-    `  const value = ${literal};`,
-    `  return value + 1;`,
-    `};`,
-  ].join('\n');
+  return [`export const ${exportName} = () => {`, `  const value = ${literal};`, `  return value + 1;`, `};`].join('\n');
 };
 
 const createTypeAlias = (typeName: string, fieldName: string): string => {

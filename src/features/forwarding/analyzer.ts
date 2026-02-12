@@ -94,7 +94,6 @@ const collectImportBindings = (
   fileMap: Map<string, ParsedFile>,
 ): Map<string, ImportBinding> => {
   const out = new Map<string, ImportBinding>();
-
   const p = program as unknown;
 
   if (!isProgramBody(p)) {
@@ -144,12 +143,15 @@ const collectImportBindings = (
 
         if (imported.type === 'Identifier' && typeof imported.name === 'string') {
           out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: imported.name });
+
           continue;
         }
 
         if (imported.type === 'Literal' && typeof (imported as unknown as { value?: unknown }).value === 'string') {
           const name = (imported as unknown as { value: string }).value;
+
           out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: name });
+
           continue;
         }
 
@@ -187,7 +189,6 @@ const collectImportBindings = (
 
 const collectExportedNameByLocal = (program: NodeValue): Map<string, string> => {
   const out = new Map<string, string>();
-
   const p = program as unknown;
 
   if (!isProgramBody(p)) {
@@ -400,6 +401,7 @@ const getParams = (node: Node): ForwardingParamsInfo | null => {
           }
 
           restParam = argument.name;
+
           params.push(argument.name);
 
           continue;
@@ -749,7 +751,6 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
   }
 
   const findings: ForwardingFinding[] = [];
-
   const fileMap = buildFileMap(files);
   const crossFileWrappers = new Map<
     string,
@@ -771,7 +772,6 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
     const namesByNode = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
-
     const exportsByLocal = collectExportedNameByLocal(file.program as NodeValue);
     const importsByLocal = collectImportBindings(file.program as NodeValue, normalizedFilePath, fileMap);
 

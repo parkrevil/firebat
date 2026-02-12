@@ -5,7 +5,12 @@ import type { ParsedFile } from './types';
 
 import { collectDuplicateGroups } from './duplicate-collector';
 import { getNodeType } from './oxc-ast-utils';
-import { createOxcFingerprint, createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFingerprintShape } from './oxc-fingerprint';
+import {
+  createOxcFingerprint,
+  createOxcFingerprintExact,
+  createOxcFingerprintNormalized,
+  createOxcFingerprintShape,
+} from './oxc-fingerprint';
 
 const isCloneTarget = (node: Node): boolean => {
   const type = getNodeType(node);
@@ -60,7 +65,11 @@ const resolveFingerprint = (cloneType: DuplicateCloneType) => {
   return createOxcFingerprintShape;
 };
 
-export const detectClones = (files: ReadonlyArray<ParsedFile>, minSize: number, cloneType: DuplicateCloneType): DuplicateGroup[] => {
+export const detectClones = (
+  files: ReadonlyArray<ParsedFile>,
+  minSize: number,
+  cloneType: DuplicateCloneType,
+): DuplicateGroup[] => {
   return collectDuplicateGroups(files, minSize, isCloneTarget, resolveFingerprint(cloneType), getItemKind, cloneType);
 };
 

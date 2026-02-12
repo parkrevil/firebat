@@ -24,6 +24,7 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
 
   for (const [from, targets] of Object.entries(adjacency)) {
     const uniqueTargets = Array.from(new Set(targets));
+
     outDegree.set(from, uniqueTargets.length);
 
     for (const to of uniqueTargets) {
@@ -34,11 +35,11 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
   const totalModules = modules.length;
   const godModuleThreshold = Math.max(10, Math.ceil(totalModules * 0.1));
   const rigidThreshold = Math.max(10, Math.ceil(totalModules * 0.15));
-
   const bidirectionalModules = new Set<string>();
 
   for (const cycle of dependencies.cycles) {
-    const nodes = cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1] ? cycle.path.slice(0, -1) : cycle.path;
+    const nodes =
+      cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1] ? cycle.path.slice(0, -1) : cycle.path;
     const unique = Array.from(new Set(nodes));
 
     if (unique.length === 2) {
@@ -93,7 +94,11 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
     return Math.max(...candidates.map(clamp01));
   };
 
-  const buildWhy = (module: string, signals: ReadonlyArray<string>, metrics: { distance: number; instability: number; abstractness: number; fanIn: number; fanOut: number }): string => {
+  const buildWhy = (
+    module: string,
+    signals: ReadonlyArray<string>,
+    metrics: { distance: number; instability: number; abstractness: number; fanIn: number; fanOut: number },
+  ): string => {
     const parts: string[] = [];
 
     if (signals.includes('off-main-sequence')) {
@@ -119,7 +124,10 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
     return parts.length > 0 ? `${module}: ${parts.join('; ')}` : module;
   };
 
-  const buildSuggestion = (signals: ReadonlyArray<string>, metrics: { distance: number; instability: number; abstractness: number }): string => {
+  const buildSuggestion = (
+    signals: ReadonlyArray<string>,
+    metrics: { distance: number; instability: number; abstractness: number },
+  ): string => {
     const suggestions: string[] = [];
 
     if (signals.includes('god-module')) {
@@ -140,9 +148,13 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
 
     if (signals.includes('off-main-sequence')) {
       if (metrics.abstractness < 0.2 && metrics.instability < 0.2) {
-        suggestions.push('either increase abstractness (interfaces/abstract classes) or increase instability by reducing dependents');
+        suggestions.push(
+          'either increase abstractness (interfaces/abstract classes) or increase instability by reducing dependents',
+        );
       } else if (metrics.abstractness > 0.8 && metrics.instability > 0.8) {
-        suggestions.push('either reduce abstractness (remove unnecessary abstractions) or stabilize by reducing outgoing dependencies');
+        suggestions.push(
+          'either reduce abstractness (remove unnecessary abstractions) or stabilize by reducing outgoing dependencies',
+        );
       } else {
         suggestions.push('move closer to the main sequence by balancing abstractness and instability');
       }
@@ -159,7 +171,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
       const instability = denom > 0 ? fanOut / denom : 0;
       const abstractness = computeAbstractness(module);
       const distance = Math.abs(abstractness + instability - 1);
-
       const signals: string[] = [];
 
       if (distance > 0.7) {
@@ -193,7 +204,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
         abstractness: clamp01(abstractness),
         distance: clamp01(distance),
       };
-
       const severity = computeSeverity({
         distance: metrics.distance,
         instability: metrics.instability,
@@ -213,7 +223,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
       };
     })
     .filter((v): v is NonNullable<typeof v> => v !== null);
-
   const hotspots = sortCouplingHotspots(hotspotsRaw);
 
   return hotspots.length === 0 ? createEmptyCoupling() : { hotspots };

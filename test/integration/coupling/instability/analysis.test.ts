@@ -27,7 +27,6 @@ describe('integration/coupling/instability', () => {
   it('should compute I=1 when module has Ca=0 and Ce>5', () => {
     // Arrange
     const sources = new Map<string, string>();
-
     const targetCount = 6;
 
     for (let index = 0; index < targetCount; index += 1) {
@@ -35,6 +34,7 @@ describe('integration/coupling/instability', () => {
     }
 
     const imports = Array.from({ length: targetCount }, (_, index) => `import './t${index}';`).join('\n');
+
     sources.set('/virtual/coupling/instability/unstable.ts', `${imports}\nexport const unstable = 1;`);
 
     // Act
@@ -59,6 +59,7 @@ describe('integration/coupling/instability', () => {
     }
 
     const coreImports = Array.from({ length: fan }, (_, index) => `import './out${index}';`).join('\n');
+
     sources.set('/virtual/coupling/instability/core.ts', `${coreImports}\nexport const core = 1;`);
 
     for (let index = 0; index < fan; index += 1) {

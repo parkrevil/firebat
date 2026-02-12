@@ -3,8 +3,8 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { NoopAnalysis, NoopFinding } from '../../types';
 
-import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyNoop = (): NoopAnalysis => ({
@@ -112,7 +112,6 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
 
     if (node.type === 'IfStatement' && isNodeRecord(node)) {
       const test = node.test;
-
       const truthiness = evalStaticTruthiness(test);
 
       if (truthiness !== null) {

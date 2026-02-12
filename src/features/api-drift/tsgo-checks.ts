@@ -58,6 +58,7 @@ const stringifyHover = (hover: unknown): string => {
 
         if (entry && typeof entry === 'object') {
           const value = (entry as { value?: unknown }).value;
+
           return typeof value === 'string' ? value : '';
         }
 
@@ -104,7 +105,6 @@ const recordIntoGroup = (
     shapes: new Map<string, ApiDriftShape>(),
     locations: new Map<string, { filePath: string; span: SourceSpan }>(),
   };
-
   const shapeKey = JSON.stringify(shape);
 
   entry.counts.set(shapeKey, (entry.counts.get(shapeKey) ?? 0) + 1);

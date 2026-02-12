@@ -341,7 +341,9 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
   return forwarding.maxForwardDepth;
 };
 
-const resolveWasteMemoryRetentionThresholdFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
+const resolveWasteMemoryRetentionThresholdFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): number | undefined => {
   const waste = features?.waste;
 
   if (waste === undefined || waste === null || typeof waste !== 'object') {

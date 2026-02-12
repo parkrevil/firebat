@@ -30,9 +30,18 @@ const compareSemver = (left: string, right: string): number => {
   const [l0, l1, l2] = parse(left);
   const [r0, r1, r2] = parse(right);
 
-  if (l0 !== r0) return l0 < r0 ? -1 : 1;
-  if (l1 !== r1) return l1 < r1 ? -1 : 1;
-  if (l2 !== r2) return l2 < r2 ? -1 : 1;
+  if (l0 !== r0) {
+    return l0 < r0 ? -1 : 1;
+  }
+
+  if (l1 !== r1) {
+    return l1 < r1 ? -1 : 1;
+  }
+
+  if (l2 !== r2) {
+    return l2 < r2 ? -1 : 1;
+  }
+
   return 0;
 };
 
@@ -51,13 +60,11 @@ export const logExternalToolVersionOnce = async (input: ExternalToolVersionInput
       stderr: 'pipe',
       stdin: 'ignore',
     });
-
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
-
     const raw = (stdout.trim().length > 0 ? stdout : stderr).trim();
     const parsed = raw.length > 0 ? extractSemver(raw) : undefined;
 

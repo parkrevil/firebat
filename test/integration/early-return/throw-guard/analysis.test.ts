@@ -4,7 +4,7 @@ import { analyzeEarlyReturn } from '../../../../src/features/early-return';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/early-return/throw-guard', () => {
-  it("should treat throw as a guard clause (hasGuardClauses=true)", () => {
+  it('should treat throw as a guard clause (hasGuardClauses=true)', () => {
     const sources = new Map<string, string>();
 
     sources.set(

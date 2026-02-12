@@ -27,10 +27,7 @@ describe('integration/api-drift', () => {
     const sources = new Map<string, string>();
 
     for (let index = 0; index < 5; index += 1) {
-      sources.set(
-        `/virtual/api-drift/get-${index}.ts`,
-        ['export function get() {', '  return 1;', '}'].join('\n'),
-      );
+      sources.set(`/virtual/api-drift/get-${index}.ts`, ['export function get() {', '  return 1;', '}'].join('\n'));
     }
 
     // Act
@@ -151,14 +148,7 @@ describe('integration/api-drift', () => {
 
     sources.set(
       '/virtual/api-drift/one.ts',
-      [
-        'export function handle() {',
-        '  const inner = () => {',
-        '    return 1;',
-        '  };',
-        '  void inner;',
-        '}',
-      ].join('\n'),
+      ['export function handle() {', '  const inner = () => {', '    return 1;', '  };', '  void inner;', '}'].join('\n'),
     );
     sources.set('/virtual/api-drift/two.ts', `export function handle() {\n  const value = 1;\n  void value;\n}`);
 
@@ -258,14 +248,9 @@ describe('integration/api-drift', () => {
       ].join('\n'),
     );
 
-    const program = [
-      parseSource(onePath, await Bun.file(onePath).text()),
-      parseSource(twoPath, await Bun.file(twoPath).text()),
-    ];
-
+    const program = [parseSource(onePath, await Bun.file(onePath).text()), parseSource(twoPath, await Bun.file(twoPath).text())];
     // Act
     const analysis = await analyzeApiDrift(program, { rootAbs, tsconfigPath });
-
     // Assert
     // If tsgo is unavailable in the environment, the detector should degrade gracefully.
     const groups = analysis.groups;

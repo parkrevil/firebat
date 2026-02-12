@@ -28,15 +28,13 @@ describe('integration/forwarding/cross-file (fuzz)', () => {
               `export const f${index} = (value) => realWork(value);`,
             ].join('\n'),
           );
+
           continue;
         }
 
         sources.set(
           filePath,
-          [
-            `import * as next from '${nextRel}';`,
-            `export const f${index} = (value) => next.f${index + 1}(value);`,
-          ].join('\n'),
+          [`import * as next from '${nextRel}';`, `export const f${index} = (value) => next.f${index + 1}(value);`].join('\n'),
         );
       }
 

@@ -5,6 +5,7 @@ import { createProgramFromMap } from '../shared/test-kit';
 
 const expectHasCloneClassOf2 = (groups: ReturnType<typeof detectClones>): void => {
   const has = groups.some(group => group.items.length === 2);
+
   expect(has).toBe(true);
 };
 
@@ -28,7 +29,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -53,7 +53,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -78,7 +77,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -103,7 +101,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -117,10 +114,7 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/normalized/optional.ts',
-      `export function alpha(obj: any) {\n  return obj?.value;\n}`,
-    );
+    sources.set('/virtual/normalized/optional.ts', `export function alpha(obj: any) {\n  return obj?.value;\n}`);
 
     sources.set(
       '/virtual/normalized/conditional.ts',
@@ -128,7 +122,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -142,18 +135,11 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/normalized/template.ts',
-      'export function alpha(x: string) {\n  return `hello ${x}!`;\n}',
-    );
+    sources.set('/virtual/normalized/template.ts', 'export function alpha(x: string) {\n  return `hello ${x}!`;\n}');
 
-    sources.set(
-      '/virtual/normalized/concat.ts',
-      "export function beta(x: string) {\n  return 'hello ' + x + '!';\n}",
-    );
+    sources.set('/virtual/normalized/concat.ts', "export function beta(x: string) {\n  return 'hello ' + x + '!';\n}");
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -167,18 +153,11 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/normalized/demorgan-a.ts',
-      `export function alpha(a: boolean, b: boolean) {\n  return !(a && b);\n}`,
-    );
+    sources.set('/virtual/normalized/demorgan-a.ts', `export function alpha(a: boolean, b: boolean) {\n  return !(a && b);\n}`);
 
-    sources.set(
-      '/virtual/normalized/demorgan-b.ts',
-      `export function beta(a: boolean, b: boolean) {\n  return !a || !b;\n}`,
-    );
+    sources.set('/virtual/normalized/demorgan-b.ts', `export function beta(a: boolean, b: boolean) {\n  return !a || !b;\n}`);
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -203,7 +182,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -228,7 +206,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const shape = detectClones(program, 1, 'type-2-shape');
     const normalized = detectClones(program, 1, 'type-3-normalized');
@@ -253,7 +230,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const normalized = detectClones(program, 1, 'type-3-normalized');
 
@@ -265,10 +241,7 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/normalized/non-optional.ts',
-      `export function alpha(obj: any) {\n  return obj.value;\n}`,
-    );
+    sources.set('/virtual/normalized/non-optional.ts', `export function alpha(obj: any) {\n  return obj.value;\n}`);
 
     sources.set(
       '/virtual/normalized/null-check.ts',
@@ -276,7 +249,6 @@ describe('integration/structural-duplicates/type-3-normalized', () => {
     );
 
     const program = createProgramFromMap(sources);
-
     // Act
     const normalized = detectClones(program, 1, 'type-3-normalized');
 

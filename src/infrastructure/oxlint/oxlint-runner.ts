@@ -3,8 +3,8 @@ import * as z from 'zod';
 import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan } from '../../types';
 
-import { tryResolveLocalBin } from '../tooling/resolve-bin';
 import { logExternalToolVersionOnce } from '../tooling/external-tool-version';
+import { tryResolveLocalBin } from '../tooling/resolve-bin';
 
 interface OxlintDiagnostic {
   readonly filePath?: string;

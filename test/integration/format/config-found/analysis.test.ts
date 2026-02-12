@@ -10,6 +10,7 @@ describe('integration/format/config-found', () => {
 
     try {
       const configAbs = path.join(project.rootAbs, '.oxfmtrc.jsonc');
+
       await writeText(configAbs, '{ /* test */ }');
 
       const resolved = await resolveToolRcPath(project.rootAbs, '.oxfmtrc.jsonc');

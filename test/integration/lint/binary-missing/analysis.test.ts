@@ -10,6 +10,7 @@ describe('integration/lint/binary-missing', () => {
 
     try {
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeLint({

@@ -10,28 +10,17 @@ describe('integration/forwarding/cross-file', () => {
 
     sources.set(
       '/virtual/forwarding-cross/a.ts',
-      [
-        "import * as b from './b';",
-        'export const f = (value) => b.g(value);',
-      ].join('\n'),
+      ["import * as b from './b';", 'export const f = (value) => b.g(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross/b.ts',
-      [
-        "import * as c from './c';",
-        'export const g = (value) => c.h(value);',
-      ].join('\n'),
+      ["import * as c from './c';", 'export const g = (value) => c.h(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross/c.ts',
-      [
-        'function realWork(value) {',
-        '  return value + 1;',
-        '}',
-        'export const h = (value) => realWork(value);',
-      ].join('\n'),
+      ['function realWork(value) {', '  return value + 1;', '}', 'export const h = (value) => realWork(value);'].join('\n'),
     );
 
     // Act
@@ -51,30 +40,17 @@ describe('integration/forwarding/cross-file', () => {
 
     sources.set(
       '/virtual/forwarding-cross-named/a.ts',
-      [
-        "import { g } from './b';",
-        'export function f(value) {',
-        '  return g(value);',
-        '}',
-      ].join('\n'),
+      ["import { g } from './b';", 'export function f(value) {', '  return g(value);', '}'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-named/b.ts',
-      [
-        "import { h } from './c';",
-        'export const g = (value) => h(value);',
-      ].join('\n'),
+      ["import { h } from './c';", 'export const g = (value) => h(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-named/c.ts',
-      [
-        'function realWork(value) {',
-        '  return value + 1;',
-        '}',
-        'export const h = (value) => realWork(value);',
-      ].join('\n'),
+      ['function realWork(value) {', '  return value + 1;', '}', 'export const h = (value) => realWork(value);'].join('\n'),
     );
 
     // Act
@@ -94,28 +70,17 @@ describe('integration/forwarding/cross-file', () => {
 
     sources.set(
       '/virtual/forwarding-cross-alias/a.ts',
-      [
-        "import { g as g2 } from './b';",
-        'export const f = (value) => g2(value);',
-      ].join('\n'),
+      ["import { g as g2 } from './b';", 'export const f = (value) => g2(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-alias/b.ts',
-      [
-        "import { h } from './c';",
-        'export const g = (value) => h(value);',
-      ].join('\n'),
+      ["import { h } from './c';", 'export const g = (value) => h(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-alias/c.ts',
-      [
-        'function realWork(value) {',
-        '  return value + 1;',
-        '}',
-        'export const h = (value) => realWork(value);',
-      ].join('\n'),
+      ['function realWork(value) {', '  return value + 1;', '}', 'export const h = (value) => realWork(value);'].join('\n'),
     );
 
     // Act
@@ -135,36 +100,22 @@ describe('integration/forwarding/cross-file', () => {
 
     sources.set(
       '/virtual/forwarding-cross-deep/a.ts',
-      [
-        "import * as b from './b';",
-        'export const f = (value) => b.g(value);',
-      ].join('\n'),
+      ["import * as b from './b';", 'export const f = (value) => b.g(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-deep/b.ts',
-      [
-        "import * as c from './c';",
-        'export const g = (value) => c.h(value);',
-      ].join('\n'),
+      ["import * as c from './c';", 'export const g = (value) => c.h(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-deep/c.ts',
-      [
-        "import { i } from './d';",
-        'export const h = (value) => i(value);',
-      ].join('\n'),
+      ["import { i } from './d';", 'export const h = (value) => i(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/forwarding-cross-deep/d.ts',
-      [
-        'function realWork(value) {',
-        '  return value + 1;',
-        '}',
-        'export const i = (value) => realWork(value);',
-      ].join('\n'),
+      ['function realWork(value) {', '  return value + 1;', '}', 'export const i = (value) => realWork(value);'].join('\n'),
     );
 
     // Act
@@ -185,10 +136,7 @@ describe('integration/forwarding/cross-file', () => {
 
     sources.set(
       '/virtual/forwarding-cross-unresolved/a.ts',
-      [
-        "import { g } from './missing';",
-        'export const f = (value) => g(value);',
-      ].join('\n'),
+      ["import { g } from './missing';", 'export const f = (value) => g(value);'].join('\n'),
     );
 
     // Act

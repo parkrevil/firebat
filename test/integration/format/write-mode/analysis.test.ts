@@ -11,6 +11,7 @@ describe('integration/format/write-mode', () => {
     try {
       const argsFileAbs = path.join(project.rootAbs, 'args.txt');
       const configAbs = path.join(project.rootAbs, '.oxfmtrc.jsonc');
+
       await writeText(configAbs, '{ /* fmt config */ }');
 
       await installFakeBin(
@@ -29,6 +30,7 @@ exit 0
       );
 
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeFormat({
@@ -41,6 +43,7 @@ exit 0
       expect(analysis.status).toBe('ok');
 
       const argsText = await readText(argsFileAbs);
+
       expect(argsText).toContain('--write');
       expect(argsText).toContain('--config');
       expect(argsText).toContain(configAbs);

@@ -5,7 +5,7 @@ import { analyzeFormat } from '../../../../src/features/format';
 import { createTempProject, installFakeBin, writeText } from '../../shared/external-tool-test-kit';
 
 describe('integration/format/check-mode', () => {
-  it("should treat non-zero exit code as needs-formatting (stdout ignored)", async () => {
+  it('should treat non-zero exit code as needs-formatting (stdout ignored)', async () => {
     const project = await createTempProject('firebat-format-check');
 
     try {
@@ -25,6 +25,7 @@ exit 7
       );
 
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeFormat({
@@ -40,7 +41,7 @@ exit 7
     }
   });
 
-  it("should treat exit code 0 as ok (even if stdout has lines)", async () => {
+  it('should treat exit code 0 as ok (even if stdout has lines)', async () => {
     const project = await createTempProject('firebat-format-check-ok');
 
     try {
@@ -60,6 +61,7 @@ exit 0
       );
 
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeFormat({

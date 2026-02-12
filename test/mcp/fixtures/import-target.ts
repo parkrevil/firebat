@@ -1,6 +1,7 @@
 // Fixture for import parsing tools (parse_imports, get_available_external_symbols)
 
 import type { Stats } from 'node:fs';
+
 import * as path from 'node:path';
 
 export const resolvePath = (...segments: string[]): string => path.resolve(...segments);

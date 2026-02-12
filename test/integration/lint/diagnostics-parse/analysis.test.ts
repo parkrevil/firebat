@@ -37,6 +37,7 @@ exit 1
       );
 
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeLint({
@@ -49,6 +50,7 @@ exit 1
       expect(analysis.diagnostics.length).toBe(1);
 
       const diag = analysis.diagnostics[0];
+
       expect(diag?.message).toBe('no-unused-vars');
       expect(diag?.code).toBe('no-unused-vars');
       expect(diag?.severity).toBe('warning');

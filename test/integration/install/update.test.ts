@@ -10,7 +10,9 @@ const testLogger = createPrettyConsoleLogger({ level: 'error', includeStack: fal
 
 const sha256Hex = (text: string): string => {
   const hasher = new Bun.CryptoHasher('sha256');
+
   hasher.update(text);
+
   return hasher.digest('hex');
 };
 
@@ -421,7 +423,9 @@ test('should delete keys missing from template even if user added them', async (
     const after = asRecordOrThrow(afterRaw, 'Expected updated .firebatrc.jsonc to be an object');
 
     expect(after.__extraRootKey).toBeUndefined();
+
     const afterFeatures = asRecordOrThrow(after.features, 'Expected updated .firebatrc.jsonc.features to be an object');
+
     expect(afterFeatures.__extraFeatureKey).toBeUndefined();
     // Unrelated comment should remain unless update had to rewrite.
     expect(afterText).toContain('// keep me');

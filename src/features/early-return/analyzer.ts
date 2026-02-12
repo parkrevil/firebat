@@ -187,6 +187,7 @@ const analyzeFunctionNode = (
 
         if (isSingleExitBlock(consequentValue as NodeValue)) {
           hasGuardClauses = true;
+
           guardClauseCount += 1;
         }
       } else {
@@ -217,7 +218,9 @@ const analyzeFunctionNode = (
         if (isSingleContinueOrBreakBlock(consequentValue as NodeValue)) {
           // P2-3: loop guard clause (continue/break)
           hasGuardClauses = true;
+
           guardClauseCount += 1;
+
           suggestions.push('loop-guard-clause');
         }
       }

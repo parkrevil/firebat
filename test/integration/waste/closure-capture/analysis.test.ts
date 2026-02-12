@@ -10,19 +10,14 @@ describe('integration/waste/closure-capture', () => {
 
     sources.set(
       '/virtual/waste/closure-capture.ts',
-      [
-        'export function setup() {',
-        '  let count = 0;',
-        '  const increment = () => count++;',
-        '  return increment;',
-        '}',
-      ].join('\n'),
+      ['export function setup() {', '  let count = 0;', '  const increment = () => count++;', '  return increment;', '}'].join(
+        '\n',
+      ),
     );
 
     // Act
     const program = createProgramFromMap(sources);
     const findings = detectWaste(program);
-
     // Assert
     const countFindings = findings.filter(f => f.label === 'count');
 

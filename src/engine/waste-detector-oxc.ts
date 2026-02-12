@@ -5,7 +5,15 @@ import type { BitSet, DefMeta, FunctionBodyAnalysis, NodeValue, ParsedFile } fro
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
-import { collectOxcNodes, getNodeName, getNodeType, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
+import {
+  collectOxcNodes,
+  getNodeName,
+  getNodeType,
+  isFunctionNode,
+  isNodeRecord,
+  isOxcNode,
+  isOxcNodeArray,
+} from './oxc-ast-utils';
 import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
 
@@ -181,9 +189,11 @@ const analyzeFunctionBody = (
     }
 
     const defId = defMetaById.length;
+
     defMetaById.push({ name: binding.name, varIndex, location: binding.location, writeKind: 'declaration' });
     defsByVarIndex[varIndex]?.push(defId);
     genDefIdsByNode[entryId]?.push(defId);
+
     defNodeIdByDefId[defId] = entryId;
   }
 
@@ -404,6 +414,7 @@ const computeMinPayloadStepsToExit = (
   const deque: number[] = [];
 
   dist[fromNodeId] = 0;
+
   deque.push(fromNodeId);
 
   while (deque.length > 0) {
@@ -442,7 +453,6 @@ const computeMinPayloadStepsToExit = (
 
 export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptions): WasteFinding[] => {
   const findings: WasteFinding[] = [];
-
   const memoryRetentionThreshold = Math.max(0, Math.round(options?.memoryRetentionThreshold ?? 10));
 
   if (!Array.isArray(files)) {
@@ -489,7 +499,6 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
         const exitId = analysis.exitId;
         const cfg = analysis.cfg;
         const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
-
         const nameByVarIndex: string[] = Array.from({ length: localIndexByName.size }, () => '');
 
         for (const [name, index] of localIndexByName.entries()) {
@@ -501,7 +510,6 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
         const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
         const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
         const outerReadNames = new Set(outerReads.map(u => u.name));
-
         const nestedFunctionEntryNodeIds: number[] = [];
 
         for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
@@ -533,6 +541,7 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
             }
 
             hasRelevantNested = true;
+
             break;
           }
 
@@ -579,6 +588,7 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
 
               if (reaching && reaching.has(defId)) {
                 isClosureCaptured = true;
+
                 break;
               }
             }

@@ -10,6 +10,7 @@ describe('integration/lint/config-found', () => {
 
     try {
       const configAbs = path.join(project.rootAbs, '.oxlintrc.jsonc');
+
       await writeText(configAbs, '{ /* test */ }');
 
       const resolved = await resolveToolRcPath(project.rootAbs, '.oxlintrc.jsonc');

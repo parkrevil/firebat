@@ -10,6 +10,7 @@ describe('integration/lint/config-missing', () => {
 
     try {
       const childAbs = path.join(parent.rootAbs, 'child');
+
       await writeText(path.join(parent.rootAbs, '.oxlintrc.jsonc'), '{ /* parent */ }');
       await writeText(path.join(childAbs, 'placeholder.txt'), 'ok');
 

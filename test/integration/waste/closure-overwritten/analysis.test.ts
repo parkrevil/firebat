@@ -10,19 +10,12 @@ describe('integration/waste/closure-overwritten', () => {
 
     sources.set(
       '/virtual/waste/closure-overwritten.ts',
-      [
-        'export function example() {',
-        '  let x = 1;',
-        '  x = 2;',
-        '  return () => x;',
-        '}',
-      ].join('\n'),
+      ['export function example() {', '  let x = 1;', '  x = 2;', '  return () => x;', '}'].join('\n'),
     );
 
     // Act
     const program = createProgramFromMap(sources);
     const findings = detectWaste(program);
-
     // Assert
     const xFindings = findings.filter(f => f.label === 'x');
 

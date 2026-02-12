@@ -195,10 +195,7 @@ describe('integration/unknown-proof', () => {
       ),
     );
 
-    await writeText(
-      filePath,
-      ['export function badAngle() {', '  const x = (<unknown>1);', '  return x;', '}'].join('\n'),
-    );
+    await writeText(filePath, ['export function badAngle() {', '  const x = (<unknown>1);', '  return x;', '}'].join('\n'));
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
@@ -271,12 +268,7 @@ describe('integration/unknown-proof', () => {
 
     await writeText(
       filePath,
-      [
-        'export function wrapped() {',
-        '  const value = ({ a: 1 } as const) as unknown;',
-        '  return value;',
-        '}',
-      ].join('\n'),
+      ['export function wrapped() {', '  const value = ({ a: 1 } as const) as unknown;', '  return value;', '}'].join('\n'),
     );
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
@@ -348,10 +340,7 @@ describe('integration/unknown-proof', () => {
       ),
     );
 
-    await writeText(
-      filePath,
-      ['export function unknownBoundary(value: unknown) {', '  return value;', '}'].join('\n'),
-    );
+    await writeText(filePath, ['export function unknownBoundary(value: unknown) {', '  return value;', '}'].join('\n'));
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act

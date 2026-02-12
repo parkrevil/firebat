@@ -1,8 +1,10 @@
 import type { Node } from 'oxc-parser';
 
+import * as path from 'node:path';
+
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
+import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
 
 import {
   getLiteralString,
@@ -15,11 +17,8 @@ import {
   walkOxcTree,
 } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
-
 import { createNoopLogger } from '../../ports/logger';
 import { runTsgoApiDriftChecks, type ApiDriftInterfaceMethodCandidate, type ApiDriftInterfaceToken } from './tsgo-checks';
-
-import * as path from 'node:path';
 
 const createEmptyApiDrift = (): ApiDriftAnalysis => ({
   groups: [],
@@ -117,7 +116,6 @@ interface ShapeLocation {
   readonly filePath: string;
   readonly span: SourceSpan;
 }
-
 
 interface GroupAccumulator {
   readonly key: string;
@@ -300,7 +298,7 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
     }
 
     const implementsNodes = Array.isArray((node as unknown as { implements?: unknown }).implements)
-      ? ((node as unknown as { implements: unknown[] }).implements)
+      ? (node as unknown as { implements: unknown[] }).implements
       : [];
 
     if (implementsNodes.length === 0) {
@@ -339,7 +337,7 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
     const body = (node as unknown as { body?: unknown }).body;
     const bodyNodes =
       body && typeof body === 'object' && Array.isArray((body as { body?: unknown }).body)
-        ? ((body as { body: unknown[] }).body)
+        ? (body as { body: unknown[] }).body
         : [];
 
     for (const element of bodyNodes) {
@@ -348,7 +346,7 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
       }
 
       const methodKey = (element as unknown as { key?: unknown }).key;
-      const methodName = methodKey != null ? getLiteralString(methodKey) ?? getNodeName(methodKey as Node) : null;
+      const methodName = methodKey != null ? (getLiteralString(methodKey) ?? getNodeName(methodKey as Node)) : null;
 
       if (typeof methodName !== 'string' || methodName.trim().length === 0 || methodName === 'constructor') {
         continue;

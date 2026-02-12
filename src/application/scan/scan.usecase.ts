@@ -371,11 +371,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    waste = detectWaste(program, {
-      ...(options.wasteMemoryRetentionThreshold !== undefined
+    waste = detectWaste(
+      program,
+      options.wasteMemoryRetentionThreshold !== undefined
         ? { memoryRetentionThreshold: options.wasteMemoryRetentionThreshold }
-        : {}),
-    });
+        : {},
+    );
     detectorTimings.waste = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.waste) });
@@ -592,7 +593,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         });
       })()
     : Promise.resolve(createEmptyApiDrift());
-
   let forwarding: ReturnType<typeof analyzeForwarding>;
 
   if (options.detectors.includes('forwarding')) {

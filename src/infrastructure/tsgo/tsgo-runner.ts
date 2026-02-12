@@ -487,6 +487,7 @@ const indexOfBytes = (haystack: Uint8Array, needle: Uint8Array): number => {
     for (let j = 0; j < needle.length; j += 1) {
       if (haystack[i + j] !== needle[j]) {
         ok = false;
+
         break;
       }
     }
@@ -509,8 +510,10 @@ const concatBytes = (a: Uint8Array, b: Uint8Array): Uint8Array => {
   }
 
   const out = new Uint8Array(a.length + b.length);
+
   out.set(a, 0);
   out.set(b, a.length);
+
   return out;
 };
 

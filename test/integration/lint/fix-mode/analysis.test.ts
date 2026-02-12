@@ -11,6 +11,7 @@ describe('integration/lint/fix-mode', () => {
     try {
       const argsFileAbs = path.join(project.rootAbs, 'args.txt');
       const configAbs = path.join(project.rootAbs, '.oxlintrc.jsonc');
+
       await writeText(configAbs, '{ /* lint config */ }');
 
       await installFakeBin(
@@ -31,6 +32,7 @@ exit 0
       );
 
       const targetAbs = path.join(project.rootAbs, 'src', 'a.ts');
+
       await writeText(targetAbs, 'export const a = 1;');
 
       const analysis = await analyzeLint({
@@ -43,6 +45,7 @@ exit 0
       expect(analysis.status).toBe('ok');
 
       const argsText = await readText(argsFileAbs);
+
       expect(argsText).toContain('--fix');
       expect(argsText).toContain('--config');
       expect(argsText).toContain(configAbs);
