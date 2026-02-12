@@ -14,8 +14,50 @@ interface AnalyzeFormatInput {
   readonly fix: boolean;
   readonly configPath?: string;
   readonly cwd?: string;
+  readonly resolveMode?: 'default' | 'project-only';
   readonly logger?: FirebatLogger;
 }
+
+const parseOxfmtFileCount = (rawStdout: unknown): number | undefined => {
+  if (typeof rawStdout !== 'string') {
+    return undefined;
+  }
+
+  const text = rawStdout.trim();
+
+  if (text.length === 0) {
+    return undefined;
+  }
+
+  const numericMatch = /(\d+)\s+files?/i.exec(text);
+
+  if (numericMatch) {
+    const parsed = Number(numericMatch[1]);
+
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+
+  const lines = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return undefined;
+  }
+
+  const looksLikePath = (value: string): boolean => {
+    if (value.includes('/') || value.includes('\\')) {
+      return true;
+    }
+
+    return /\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|scss|html)$/i.test(value);
+  };
+
+  const pathLines = lines.filter(looksLikePath);
+
+  return pathLines.length > 0 ? pathLines.length : undefined;
+};
 
 export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAnalysis> => {
   const logger = input.logger ?? createNoopLogger();
@@ -24,6 +66,7 @@ export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAn
     mode: input.fix ? 'write' : 'check',
     ...(input.configPath !== undefined ? { configPath: input.configPath } : {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    ...(input.resolveMode !== undefined ? { resolveMode: input.resolveMode } : {}),
     logger,
   });
 
@@ -41,8 +84,7 @@ export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAn
 
   if (!input.fix) {
     const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 0;
-    const fileCount =
-      typeof result.rawStdout === 'string' ? result.rawStdout.split('\n').filter(l => l.trim().length > 0).length : undefined;
+    const fileCount = parseOxfmtFileCount(result.rawStdout);
 
     return {
       status: exitCode === 0 ? 'ok' : 'needs-formatting',

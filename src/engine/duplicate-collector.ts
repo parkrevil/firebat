@@ -1,4 +1,4 @@
-import type { DuplicateGroup, DuplicateItem, SourceSpan } from '../types';
+import type { DuplicateCloneType, DuplicateGroup, DuplicateItem, SourceSpan } from '../types';
 import type { DuplicateFingerprintResolver, DuplicateItemKindResolver, OxcNodePredicate, ParsedFile } from './types';
 
 import { collectOxcNodes, getNodeHeader } from './oxc-ast-utils';
@@ -19,6 +19,7 @@ const collectDuplicateGroups = (
   isTarget: OxcNodePredicate,
   resolveFingerprint: DuplicateFingerprintResolver,
   resolveKind: DuplicateItemKindResolver,
+  cloneType: DuplicateCloneType,
 ): DuplicateGroup[] => {
   const groupsByHash = new Map<string, CollectorItem[]>();
 
@@ -66,6 +67,7 @@ const collectDuplicateGroups = (
     }
 
     groups.push({
+      cloneType,
       items: items.map(({ kind, header, filePath, span }) => ({ kind, header, filePath, span })),
     });
   }

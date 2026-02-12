@@ -5,17 +5,25 @@ interface ResolveLocalBinInput {
   readonly binName: string;
   /** Caller file directory (usually `import.meta.dir`) used for package-local fallbacks. */
   readonly callerDir: string;
+  /**
+   * Tool resolution mode.
+   * - default: prefer project-local, then firebat package-local, then PATH
+   * - project-only: resolve only from `cwd/node_modules/.bin` (useful for deterministic tests)
+   */
+  readonly resolveMode?: 'default' | 'project-only';
 }
 
 const tryResolveLocalBin = async (input: ResolveLocalBinInput): Promise<string | null> => {
-  const candidates = [
-    // project-local
-    path.resolve(input.cwd, 'node_modules', '.bin', input.binName),
+  const mode = input.resolveMode ?? 'default';
+  const candidates = [path.resolve(input.cwd, 'node_modules', '.bin', input.binName)];
 
+  if (mode !== 'project-only') {
     // firebat package-local (dist/* sibling to node_modules/*)
-    path.resolve(input.callerDir, '../../../node_modules', '.bin', input.binName),
-    path.resolve(input.callerDir, '../../node_modules', '.bin', input.binName),
-  ];
+    candidates.push(
+      path.resolve(input.callerDir, '../../../node_modules', '.bin', input.binName),
+      path.resolve(input.callerDir, '../../node_modules', '.bin', input.binName),
+    );
+  }
 
   for (const candidate of candidates) {
     try {
@@ -29,7 +37,7 @@ const tryResolveLocalBin = async (input: ResolveLocalBinInput): Promise<string |
     }
   }
 
-  if (typeof Bun.which === 'function') {
+  if (mode !== 'project-only' && typeof Bun.which === 'function') {
     const resolved = Bun.which(input.binName);
 
     if (resolved !== null && resolved.length > 0) {

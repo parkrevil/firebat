@@ -3,11 +3,13 @@ import * as path from 'node:path';
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { DependencyAnalysis, DependencyEdgeCutHint, DependencyFanStat } from '../../types';
 
-import { isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
+import { getNodeName, isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
 import { sortDependencyFanStats } from '../../engine/sort-utils';
 
 const createEmptyDependencies = (): DependencyAnalysis => ({
   cycles: [],
+  adjacency: {},
+  exportStats: {},
   fanInTop: [],
   fanOutTop: [],
   edgeCutHints: [],
@@ -140,6 +142,150 @@ const buildAdjacency = (files: ReadonlyArray<ParsedFile>): Map<string, ReadonlyA
   }
 
   return adjacency;
+};
+
+const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<unknown> } => {
+  return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
+};
+
+const collectExportStats = (
+  file: ParsedFile,
+): {
+  readonly total: number;
+  readonly abstract: number;
+} => {
+  if (file.errors.length > 0) {
+    return { total: 0, abstract: 0 };
+  }
+
+  const program = file.program as unknown;
+
+  if (!isProgramBody(program)) {
+    return { total: 0, abstract: 0 };
+  }
+
+  const declaredInterfaces = new Set<string>();
+  const declaredAbstractClasses = new Set<string>();
+
+  for (const stmt of program.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type === 'TSInterfaceDeclaration') {
+      const name = getNodeName((stmt as unknown as { id?: unknown }).id);
+
+      if (typeof name === 'string' && name.trim().length > 0) {
+        declaredInterfaces.add(name);
+      }
+
+      continue;
+    }
+
+    if (stmt.type === 'ClassDeclaration') {
+      const abstractFlag = !!(stmt as unknown as { abstract?: unknown }).abstract;
+
+      if (!abstractFlag) {
+        continue;
+      }
+
+      const name = getNodeName((stmt as unknown as { id?: unknown }).id);
+
+      if (typeof name === 'string' && name.trim().length > 0) {
+        declaredAbstractClasses.add(name);
+      }
+    }
+  }
+
+  let total = 0;
+  let abstract = 0;
+
+  const record = (kind: 'interface' | 'abstract-class' | 'other'): void => {
+    total += 1;
+
+    if (kind === 'interface' || kind === 'abstract-class') {
+      abstract += 1;
+    }
+  };
+
+  const recordDeclaration = (decl: unknown): void => {
+    if (!isOxcNode(decl) || !isNodeRecord(decl)) {
+      return;
+    }
+
+    if (decl.type === 'TSInterfaceDeclaration') {
+      record('interface');
+      return;
+    }
+
+    if (decl.type === 'ClassDeclaration') {
+      const abstractFlag = !!(decl as unknown as { abstract?: unknown }).abstract;
+      record(abstractFlag ? 'abstract-class' : 'other');
+      return;
+    }
+
+    // Types, consts, functions, enums, namespaces, etc.
+    record('other');
+  };
+
+  for (const stmt of program.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type === 'ExportNamedDeclaration') {
+      const source = (stmt as unknown as { source?: unknown }).source;
+
+      // Ignore re-exports (cannot attribute abstractness without resolution).
+      if (source != null) {
+        continue;
+      }
+
+      const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
+
+      if (declaration != null) {
+        recordDeclaration(declaration);
+        continue;
+      }
+
+      const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
+
+      if (!Array.isArray(specifiers)) {
+        continue;
+      }
+
+      for (const spec of specifiers) {
+        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+          continue;
+        }
+
+        const local = (spec as unknown as { local?: unknown }).local;
+        const localName = getNodeName(local as never);
+
+        if (typeof localName !== 'string' || localName.trim().length === 0) {
+          record('other');
+          continue;
+        }
+
+        if (declaredInterfaces.has(localName)) {
+          record('interface');
+        } else if (declaredAbstractClasses.has(localName)) {
+          record('abstract-class');
+        } else {
+          record('other');
+        }
+      }
+
+      continue;
+    }
+
+    if (stmt.type === 'ExportDefaultDeclaration') {
+      const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
+      recordDeclaration(declaration);
+    }
+  }
+
+  return { total, abstract };
 };
 
 const compareStrings = (left: string, right: string): number => left.localeCompare(right);
@@ -406,10 +552,13 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
   }
 
   const adjacency = buildAdjacency(files);
+  const adjacencyOut: Record<string, ReadonlyArray<string>> = {};
+  const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
   const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
   for (const [from, targets] of adjacency.entries()) {
+    adjacencyOut[toRelativePath(from)] = targets.map(toRelativePath);
     outDegree.set(from, targets.length);
 
     if (!inDegree.has(from)) {
@@ -429,8 +578,15 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
   const fanOutTop = listFanStats(outDegree, 10);
   const edgeCutHints = buildEdgeCutHints(cyclePaths, outDegree);
 
+  for (const file of files) {
+    const key = toRelativePath(normalizePath(file.filePath));
+    exportStats[key] = collectExportStats(file);
+  }
+
   return {
     cycles,
+    adjacency: adjacencyOut,
+    exportStats,
     fanInTop,
     fanOutTop,
     edgeCutHints,

@@ -569,24 +569,24 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     noop = createEmptyNoop();
   }
 
-  let apiDrift: ReturnType<typeof analyzeApiDrift>;
+  const apiDriftPromise = options.detectors.includes('api-drift')
+    ? ((): Promise<Awaited<ReturnType<typeof analyzeApiDrift>>> => {
+        const t0 = nowMs();
+        const detectorKey = 'api-drift';
 
-  if (options.detectors.includes('api-drift')) {
-    const t0 = nowMs();
-    const detectorKey = 'api-drift';
+        logger.debug('detector: start', { detector: detectorKey });
 
-    logger.debug('detector: start', { detector: detectorKey });
+        return analyzeApiDrift(program, { rootAbs: ctx.rootAbs, logger }).then(r => {
+          const durationMs = nowMs() - t0;
 
-    apiDrift = analyzeApiDrift(program);
+          detectorTimings[detectorKey] = durationMs;
 
-    const durationMs = nowMs() - t0;
+          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
 
-    detectorTimings[detectorKey] = durationMs;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  } else {
-    apiDrift = createEmptyApiDrift();
-  }
+          return r;
+        });
+      })()
+    : Promise.resolve(createEmptyApiDrift());
 
   let forwarding: ReturnType<typeof analyzeForwarding>;
 
@@ -604,12 +604,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     forwarding = createEmptyForwarding();
   }
 
-  const [barrelPolicy, unknownProof, lint, typecheck, format] = await Promise.all([
+  const [barrelPolicy, unknownProof, lint, typecheck, format, apiDrift] = await Promise.all([
     barrelPolicyPromise,
     unknownProofPromise,
     lintPromise ?? Promise.resolve(createEmptyLint()),
     typecheckPromise,
     formatPromise ?? Promise.resolve(createEmptyFormat()),
+    apiDriftPromise,
   ]);
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
@@ -661,4 +662,4 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   return report;
 };
 
-export { scanUseCase };
+export { resolveToolRcPath, scanUseCase };

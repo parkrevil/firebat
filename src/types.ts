@@ -75,7 +75,10 @@ export interface DuplicateItem {
   readonly span: SourceSpan;
 }
 
+export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape';
+
 export interface DuplicateGroup {
+  readonly cloneType: DuplicateCloneType;
   readonly items: ReadonlyArray<DuplicateItem>;
 }
 
@@ -97,6 +100,10 @@ export interface DependencyEdgeCutHint {
 
 export interface DependencyAnalysis {
   readonly cycles: ReadonlyArray<DependencyCycle>;
+  /** Dependency graph adjacency list (module -> direct imports). Keys/values are project-relative paths. */
+  readonly adjacency: Readonly<Record<string, ReadonlyArray<string>>>;
+  /** Export counts used for coupling abstractness calculation. Keys are project-relative module paths. */
+  readonly exportStats: Readonly<Record<string, { readonly total: number; readonly abstract: number }>>;
   readonly fanInTop: ReadonlyArray<DependencyFanStat>;
   readonly fanOutTop: ReadonlyArray<DependencyFanStat>;
   readonly edgeCutHints: ReadonlyArray<DependencyEdgeCutHint>;
@@ -106,6 +113,15 @@ export interface CouplingHotspot {
   readonly module: string;
   readonly score: number;
   readonly signals: ReadonlyArray<string>;
+  readonly metrics: {
+    readonly fanIn: number;
+    readonly fanOut: number;
+    readonly instability: number;
+    readonly abstractness: number;
+    readonly distance: number;
+  };
+  readonly why: string;
+  readonly suggestedRefactor: string;
 }
 
 export interface CouplingAnalysis {

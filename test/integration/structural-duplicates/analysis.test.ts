@@ -87,4 +87,20 @@ describe('integration/structural-duplicates', () => {
     // Assert
     expect(groupSize).toBeGreaterThanOrEqual(3);
   });
+
+  it('should detect interface clone classes when structures match', () => {
+    // Arrange
+    const sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/iface-one.ts', 'export interface A { value: string; }');
+    sources.set('/virtual/dup/iface-two.ts', 'export interface B { value: string; }');
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const structural = analyzeStructuralDuplicates(program, 1);
+    const hasInterfaceGroup = structural.cloneClasses.some(group => group.items.some(item => item.kind === 'interface'));
+
+    // Assert
+    expect(hasInterfaceGroup).toBe(true);
+  });
 });

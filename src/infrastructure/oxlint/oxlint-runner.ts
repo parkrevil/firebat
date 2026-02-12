@@ -4,6 +4,7 @@ import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan } from '../../types';
 
 import { tryResolveLocalBin } from '../tooling/resolve-bin';
+import { logExternalToolVersionOnce } from '../tooling/external-tool-version';
 
 interface OxlintDiagnostic {
   readonly filePath?: string;
@@ -29,6 +30,7 @@ interface RunOxlintInput {
   readonly fix?: boolean;
   /** Working directory used to resolve project-local binaries. Defaults to process.cwd(). */
   readonly cwd?: string;
+  readonly resolveMode?: 'default' | 'project-only';
   readonly logger: FirebatLogger;
 }
 
@@ -93,7 +95,12 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
 
   logger.debug('oxlint: resolving command');
 
-  const resolved = await tryResolveLocalBin({ cwd, binName: 'oxlint', callerDir: import.meta.dir });
+  const resolved = await tryResolveLocalBin({
+    cwd,
+    binName: 'oxlint',
+    callerDir: import.meta.dir,
+    ...(input.resolveMode !== undefined ? { resolveMode: input.resolveMode } : {}),
+  });
 
   if (!resolved || resolved.length === 0) {
     logger.warn('oxlint: command not found — lint tool unavailable');
@@ -106,6 +113,15 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   }
 
   logger.trace('oxlint: resolved command', { cmd: resolved, cwd });
+
+  await logExternalToolVersionOnce({
+    tool: 'oxlint',
+    cmdPath: resolved,
+    cwd,
+    // P1-4: pin minimum version to the current repo baseline.
+    minVersion: '1.46.0',
+    logger,
+  });
 
   const args: string[] = [];
 

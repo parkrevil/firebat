@@ -5,27 +5,27 @@ import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed } from
 
 const createBlockPairSource = (firstName: string, secondName: string, literal: number): string => {
   return [
-    `export function ${firstName}() {`,
+    `export const ${firstName} = () => {`,
     `  if (true) {`,
     `    const value = ${literal};`,
     `    console.log(value);`,
     `  }`,
-    `}`,
-    `export function ${secondName}() {`,
+    `};`,
+    `export const ${secondName} = () => {`,
     `  if (true) {`,
     `    const value = ${literal};`,
     `    console.log(value);`,
     `  }`,
-    `}`,
+    `};`,
   ].join('\n');
 };
 
 const hasBlockDuplicateGroup = (groups: ReturnType<typeof detectExactDuplicates>): boolean => {
-  return groups.some(group => group.items.filter(item => item.kind === 'node').length >= 2);
+  return groups.some(group => group.items.some(item => item.kind === 'node'));
 };
 
 describe('exact-duplicates (integration fuzz)', () => {
-  it('should find block-level duplicates when literals are randomized (seeded)', () => {
+  it('should not target BlockStatement while remaining deterministic (seeded)', () => {
     // Arrange
     const seed = getFuzzSeed();
     const prng = createPrng(seed);
@@ -42,9 +42,11 @@ describe('exact-duplicates (integration fuzz)', () => {
       const program = createProgramFromMap(sources);
       const groups = detectExactDuplicates(program, 1);
       const hasBlockDuplicate = hasBlockDuplicateGroup(groups);
+      const hasSomeDuplicate = groups.some(group => group.items.length >= 2);
 
       // Assert
-      expect(hasBlockDuplicate).toBe(true);
+      expect(hasSomeDuplicate).toBe(true);
+      expect(hasBlockDuplicate).toBe(false);
 
       const groupsAgain = detectExactDuplicates(program, 1);
 

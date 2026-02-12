@@ -1,23 +1,22 @@
 import type { Node } from 'oxc-parser';
 
-import type { DuplicateGroup, DuplicateItem } from '../types';
+import type { DuplicateCloneType, DuplicateGroup, DuplicateItem } from '../types';
 import type { ParsedFile } from './types';
 
 import { collectDuplicateGroups } from './duplicate-collector';
 import { getNodeType } from './oxc-ast-utils';
-import { createOxcFingerprint } from './oxc-fingerprint';
+import { createOxcFingerprint, createOxcFingerprintExact, createOxcFingerprintShape } from './oxc-fingerprint';
 
-const isDuplicateTarget = (node: Node): boolean => {
-  // Simplified target selection for AST
+const isCloneTarget = (node: Node): boolean => {
   const type = getNodeType(node);
 
   return (
     type === 'FunctionDeclaration' ||
     type === 'ClassDeclaration' ||
+    type === 'ClassExpression' ||
     type === 'MethodDefinition' ||
     type === 'FunctionExpression' ||
     type === 'ArrowFunctionExpression' ||
-    type === 'BlockStatement' ||
     type === 'TSTypeAliasDeclaration' ||
     type === 'TSInterfaceDeclaration'
   );
@@ -45,6 +44,20 @@ const getItemKind = (node: Node): DuplicateItem['kind'] => {
   return 'node';
 };
 
-export const detectDuplicates = (files: ParsedFile[], minSize: number): DuplicateGroup[] => {
-  return collectDuplicateGroups(files, minSize, isDuplicateTarget, createOxcFingerprint, getItemKind);
+const resolveFingerprint = (cloneType: DuplicateCloneType) => {
+  if (cloneType === 'type-1') {
+    return createOxcFingerprintExact;
+  }
+
+  if (cloneType === 'type-2') {
+    return createOxcFingerprint;
+  }
+
+  return createOxcFingerprintShape;
 };
+
+export const detectClones = (files: ReadonlyArray<ParsedFile>, minSize: number, cloneType: DuplicateCloneType): DuplicateGroup[] => {
+  return collectDuplicateGroups(files, minSize, isCloneTarget, resolveFingerprint(cloneType), getItemKind, cloneType);
+};
+
+export { isCloneTarget };

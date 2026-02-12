@@ -2,48 +2,34 @@ import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
+import type { FirebatLogger } from '../../ports/logger';
 
 import {
-  collectFunctionNodes,
   getLiteralString,
   getNodeName,
   isFunctionNode,
   isNodeRecord,
   isOxcNode,
+  collectFunctionNodesWithParent,
+  getNodeHeader,
   walkOxcTree,
 } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
+
+import { createNoopLogger } from '../../ports/logger';
+import { runTsgoApiDriftChecks, type ApiDriftInterfaceMethodCandidate, type ApiDriftInterfaceToken } from './tsgo-checks';
+
+import * as path from 'node:path';
 
 const createEmptyApiDrift = (): ApiDriftAnalysis => ({
   groups: [],
 });
 
-const getFunctionName = (node: Node): string | null => {
-  const idNode = isNodeRecord(node) ? node.id : undefined;
-  const idName = getNodeName(idNode);
-
-  if (typeof idName === 'string' && idName.length > 0) {
-    return idName;
-  }
-
-  const key = isNodeRecord(node) ? node.key : undefined;
-
-  if (key !== undefined && key !== null) {
-    const keyName = getNodeName(key);
-
-    if (typeof keyName === 'string' && keyName.length > 0) {
-      return keyName;
-    }
-
-    const keyValue = getLiteralString(key);
-
-    if (typeof keyValue === 'string' && keyValue.length > 0) {
-      return keyValue;
-    }
-  }
-
-  return null;
-};
+interface AnalyzeApiDriftInput {
+  readonly rootAbs?: string;
+  readonly tsconfigPath?: string;
+  readonly logger?: FirebatLogger;
+}
 
 const isParamOptional = (value: NodeValue): boolean => {
   if (!isOxcNode(value)) {
@@ -132,56 +118,60 @@ interface ShapeLocation {
   readonly span: SourceSpan;
 }
 
+
+interface GroupAccumulator {
+  readonly key: string;
+  readonly label: string;
+  readonly counts: Map<string, number>;
+  readonly shapes: Map<string, ApiDriftShape>;
+  readonly locations: Map<string, ShapeLocation>;
+}
+
 const recordShape = (
-  name: string,
+  groupsByKey: Map<string, GroupAccumulator>,
+  groupKey: string,
+  label: string,
   shape: ApiDriftShape,
   location: ShapeLocation,
-  countsByName: Map<string, Map<string, number>>,
-  shapesByName: Map<string, Map<string, ApiDriftShape>>,
-  locationsByName: Map<string, Map<string, ShapeLocation>>,
 ): void => {
-  const key = JSON.stringify(shape);
-  const countMap = countsByName.get(name) ?? new Map<string, number>();
-  const shapeMap = shapesByName.get(name) ?? new Map<string, ApiDriftShape>();
-  const locMap = locationsByName.get(name) ?? new Map<string, ShapeLocation>();
+  const entry = groupsByKey.get(groupKey) ?? {
+    key: groupKey,
+    label,
+    counts: new Map<string, number>(),
+    shapes: new Map<string, ApiDriftShape>(),
+    locations: new Map<string, ShapeLocation>(),
+  };
+  const shapeKey = JSON.stringify(shape);
 
-  countMap.set(key, (countMap.get(key) ?? 0) + 1);
-  shapeMap.set(key, shape);
-  locMap.set(key, location);
+  entry.counts.set(shapeKey, (entry.counts.get(shapeKey) ?? 0) + 1);
+  entry.shapes.set(shapeKey, shape);
+  entry.locations.set(shapeKey, location);
 
-  countsByName.set(name, countMap);
-  shapesByName.set(name, shapeMap);
-  locationsByName.set(name, locMap);
+  groupsByKey.set(groupKey, entry);
 };
 
-const buildGroups = (
-  countsByName: Map<string, Map<string, number>>,
-  shapesByName: Map<string, Map<string, ApiDriftShape>>,
-  locationsByName: Map<string, Map<string, ShapeLocation>>,
-): ApiDriftGroup[] => {
+const buildGroups = (groupsByKey: Map<string, GroupAccumulator>): ApiDriftGroup[] => {
   const groups: ApiDriftGroup[] = [];
-  const names = Array.from(countsByName.keys()).sort((left, right) => left.localeCompare(right));
+  const keys = Array.from(groupsByKey.keys()).sort((left, right) => left.localeCompare(right));
 
-  for (const name of names) {
-    const countMap = countsByName.get(name);
-    const shapeMap = shapesByName.get(name);
-    const locMap = locationsByName.get(name);
+  for (const key of keys) {
+    const entry = groupsByKey.get(key);
 
-    if (!countMap || !shapeMap || !locMap || countMap.size <= 1) {
+    if (!entry || entry.counts.size <= 1) {
       continue;
     }
 
     let standardKey = '';
     let standardCount = -1;
 
-    for (const [key, count] of countMap.entries()) {
+    for (const [shapeKey, count] of entry.counts.entries()) {
       if (count > standardCount) {
-        standardKey = key;
+        standardKey = shapeKey;
         standardCount = count;
       }
     }
 
-    const standardShape = shapeMap.get(standardKey);
+    const standardShape = entry.shapes.get(standardKey);
 
     if (!standardShape) {
       continue;
@@ -189,12 +179,12 @@ const buildGroups = (
 
     const outliers: ApiDriftOutlier[] = [];
 
-    for (const [key, shape] of shapeMap.entries()) {
-      if (key === standardKey) {
+    for (const [shapeKey, shape] of entry.shapes.entries()) {
+      if (shapeKey === standardKey) {
         continue;
       }
 
-      const loc = locMap.get(key);
+      const loc = entry.locations.get(shapeKey);
 
       outliers.push({
         shape,
@@ -207,53 +197,285 @@ const buildGroups = (
       continue;
     }
 
-    groups.push({
-      label: name,
-      standardCandidate: standardShape,
-      outliers,
-    });
+    groups.push({ label: entry.label, standardCandidate: standardShape, outliers });
   }
 
   return groups;
 };
 
-const analyzeApiDrift = (files: ReadonlyArray<ParsedFile>): ApiDriftAnalysis => {
+const extractPrefixFamily = (name: string): string | null => {
+  const trimmed = name.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  for (let index = 1; index < trimmed.length; index += 1) {
+    const ch = trimmed[index];
+
+    if (ch >= 'A' && ch <= 'Z') {
+      return trimmed.slice(0, index);
+    }
+  }
+
+  return trimmed;
+};
+
+const getClassName = (node: Node, parentMap: Map<Node, Node | null>): string | null => {
+  let current: Node | null = node;
+
+  while (current) {
+    if ((current.type === 'ClassDeclaration' || current.type === 'ClassExpression') && isNodeRecord(current)) {
+      const idName = getNodeName(current.id);
+
+      if (typeof idName === 'string' && idName.trim().length > 0) {
+        return idName;
+      }
+
+      if (current.type === 'ClassExpression') {
+        const parent = parentMap.get(current);
+
+        if (parent && isNodeRecord(parent) && parent.type === 'VariableDeclarator') {
+          const varName = getNodeName(parent.id);
+
+          if (typeof varName === 'string' && varName.trim().length > 0) {
+            return varName;
+          }
+        }
+      }
+    }
+
+    current = parentMap.get(current) ?? null;
+  }
+
+  return null;
+};
+
+const buildParentMap = (program: NodeValue): Map<Node, Node | null> => {
+  const parentMap = new Map<Node, Node | null>();
+
+  const visit = (value: NodeValue, parent: Node | null): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        visit(entry as NodeValue, parent);
+      }
+
+      return;
+    }
+
+    if (!isOxcNode(value)) {
+      return;
+    }
+
+    parentMap.set(value, parent);
+
+    if (!isNodeRecord(value)) {
+      return;
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      visit(child as NodeValue, value);
+    }
+  };
+
+  visit(program, null);
+
+  return parentMap;
+};
+
+const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArray<ApiDriftInterfaceMethodCandidate> => {
+  const candidates: ApiDriftInterfaceMethodCandidate[] = [];
+
+  if (file.errors.length > 0) {
+    return candidates;
+  }
+
+  walkOxcTree(file.program, node => {
+    if (!isNodeRecord(node) || (node.type !== 'ClassDeclaration' && node.type !== 'ClassExpression')) {
+      return true;
+    }
+
+    const implementsNodes = Array.isArray((node as unknown as { implements?: unknown }).implements)
+      ? ((node as unknown as { implements: unknown[] }).implements)
+      : [];
+
+    if (implementsNodes.length === 0) {
+      return true;
+    }
+
+    const interfaceTokens: ApiDriftInterfaceToken[] = [];
+
+    for (const impl of implementsNodes) {
+      if (!isOxcNode(impl) || !isNodeRecord(impl)) {
+        continue;
+      }
+
+      const expr = (impl as unknown as { expression?: unknown }).expression;
+
+      if (!isOxcNode(expr)) {
+        continue;
+      }
+
+      const name = getNodeName(expr as Node);
+
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        continue;
+      }
+
+      const start = getLineColumn(file.sourceText, (expr as Node).start);
+      const end = getLineColumn(file.sourceText, (expr as Node).end);
+
+      interfaceTokens.push({ name, span: { start, end } });
+    }
+
+    if (interfaceTokens.length === 0) {
+      return true;
+    }
+
+    const body = (node as unknown as { body?: unknown }).body;
+    const bodyNodes =
+      body && typeof body === 'object' && Array.isArray((body as { body?: unknown }).body)
+        ? ((body as { body: unknown[] }).body)
+        : [];
+
+    for (const element of bodyNodes) {
+      if (!isOxcNode(element) || !isNodeRecord(element) || element.type !== 'MethodDefinition') {
+        continue;
+      }
+
+      const methodKey = (element as unknown as { key?: unknown }).key;
+      const methodName = methodKey != null ? getLiteralString(methodKey) ?? getNodeName(methodKey as Node) : null;
+
+      if (typeof methodName !== 'string' || methodName.trim().length === 0 || methodName === 'constructor') {
+        continue;
+      }
+
+      const valueNode = (element as unknown as { value?: unknown }).value;
+
+      if (!isOxcNode(valueNode)) {
+        continue;
+      }
+
+      const shape = buildShape(valueNode as unknown as Node);
+      const start = getLineColumn(file.sourceText, (element as Node).start);
+      const end = getLineColumn(file.sourceText, (element as Node).end);
+      const span = { start, end };
+
+      for (const interfaceToken of interfaceTokens) {
+        candidates.push({
+          interfaceToken,
+          methodName,
+          shape,
+          filePath: file.filePath,
+          span,
+        });
+      }
+    }
+
+    return true;
+  });
+
+  return candidates;
+};
+
+const analyzeApiDrift = async (files: ReadonlyArray<ParsedFile>, input?: AnalyzeApiDriftInput): Promise<ApiDriftAnalysis> => {
   if (files.length === 0) {
     return createEmptyApiDrift();
   }
 
-  const countsByName = new Map<string, Map<string, number>>();
-  const shapesByName = new Map<string, Map<string, ApiDriftShape>>();
-  const locationsByName = new Map<string, Map<string, ShapeLocation>>();
+  const groupsByKey = new Map<string, GroupAccumulator>();
+  const prefixCounts = new Map<string, number>();
+  const prefixEntries: Array<{ prefix: string; shape: ApiDriftShape; location: ShapeLocation }> = [];
+  const interfaceCandidatesByFile = new Map<string, ReadonlyArray<ApiDriftInterfaceMethodCandidate>>();
 
   for (const file of files) {
     if (file.errors.length > 0) {
       continue;
     }
 
-    const functions = collectFunctionNodes(file.program);
+    const parentMap = buildParentMap(file.program);
+    const functions = collectFunctionNodesWithParent(file.program);
+    const fileLabelSuffix = path.basename(file.filePath);
 
-    for (const functionNode of functions) {
-      const name = getFunctionName(functionNode);
+    for (const fn of functions) {
+      const name = getNodeHeader(fn.node, fn.parent);
 
-      if (name === null || name.length === 0) {
+      if (name === 'anonymous' || name.trim().length === 0) {
         continue;
       }
 
-      const shape = buildShape(functionNode);
-      const start = getLineColumn(file.sourceText, functionNode.start);
-      const end = getLineColumn(file.sourceText, functionNode.end);
-      const location: ShapeLocation = {
-        filePath: file.filePath,
-        span: { start, end },
-      };
+      const shape = buildShape(fn.node);
+      const start = getLineColumn(file.sourceText, fn.node.start);
+      const end = getLineColumn(file.sourceText, fn.node.end);
+      const location: ShapeLocation = { filePath: file.filePath, span: { start, end } };
 
-      recordShape(name, shape, location, countsByName, shapesByName, locationsByName);
+      if (fn.parent && isNodeRecord(fn.parent) && fn.parent.type === 'MethodDefinition') {
+        const className = getClassName(fn.parent, parentMap);
+
+        if (className !== null && className.trim().length > 0) {
+          recordShape(groupsByKey, `class:${className}.${name}`, `${className}.${name}`, shape, location);
+        }
+
+        continue;
+      }
+
+      recordShape(groupsByKey, `file:${file.filePath}:${name}`, `${name} @ ${fileLabelSuffix}`, shape, location);
+
+      const prefix = extractPrefixFamily(name);
+
+      if (prefix !== null && prefix.length > 0) {
+        prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + 1);
+        prefixEntries.push({ prefix, shape, location });
+      }
+    }
+
+    const interfaceCandidates = collectInterfaceMethodCandidatesForFile(file);
+
+    if (interfaceCandidates.length > 0) {
+      interfaceCandidatesByFile.set(file.filePath, interfaceCandidates);
+    }
+  }
+
+  const qualifiedPrefixes = new Set<string>();
+
+  for (const [prefix, count] of prefixCounts.entries()) {
+    if (count >= 3) {
+      qualifiedPrefixes.add(prefix);
+    }
+  }
+
+  for (const entry of prefixEntries) {
+    if (!qualifiedPrefixes.has(entry.prefix)) {
+      continue;
+    }
+
+    recordShape(groupsByKey, `prefix:${entry.prefix}`, `prefix:${entry.prefix}`, entry.shape, entry.location);
+  }
+
+  const rootAbs = input?.rootAbs;
+  const logger = input?.logger ?? createNoopLogger();
+  let interfaceGroups: ReadonlyArray<ApiDriftGroup> = [];
+
+  if (rootAbs !== undefined && interfaceCandidatesByFile.size > 0) {
+    const tsgoResult = await runTsgoApiDriftChecks({
+      program: files,
+      candidatesByFile: interfaceCandidatesByFile,
+      rootAbs,
+      ...(input?.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
+      logger,
+    });
+
+    if (tsgoResult.ok) {
+      interfaceGroups = tsgoResult.groups;
     }
   }
 
   return {
-    groups: buildGroups(countsByName, shapesByName, locationsByName),
+    groups: [...buildGroups(groupsByKey), ...interfaceGroups],
   };
 };
 

@@ -1,6 +1,7 @@
 import type { FirebatLogger } from '../../ports/logger';
 
 import { tryResolveLocalBin } from '../tooling/resolve-bin';
+import { logExternalToolVersionOnce } from '../tooling/external-tool-version';
 
 interface OxfmtRunResult {
   readonly ok: boolean;
@@ -17,6 +18,7 @@ interface RunOxfmtInput {
   readonly mode: 'check' | 'write';
   /** Working directory used to resolve project-local binaries. Defaults to process.cwd(). */
   readonly cwd?: string;
+  readonly resolveMode?: 'default' | 'project-only';
   readonly logger: FirebatLogger;
 }
 
@@ -26,7 +28,12 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
 
   logger.debug('oxfmt: resolving command');
 
-  const resolved = await tryResolveLocalBin({ cwd, binName: 'oxfmt', callerDir: import.meta.dir });
+  const resolved = await tryResolveLocalBin({
+    cwd,
+    binName: 'oxfmt',
+    callerDir: import.meta.dir,
+    ...(input.resolveMode !== undefined ? { resolveMode: input.resolveMode } : {}),
+  });
 
   if (!resolved || resolved.length === 0) {
     logger.warn('oxfmt: command not found — format tool unavailable');
@@ -39,6 +46,15 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
   }
 
   logger.trace('oxfmt: resolved command', { cmd: resolved, cwd });
+
+  await logExternalToolVersionOnce({
+    tool: 'oxfmt',
+    cmdPath: resolved,
+    cwd,
+    // P1-4: pin minimum version to the current repo baseline.
+    minVersion: '0.26.0',
+    logger,
+  });
 
   const args: string[] = [];
 

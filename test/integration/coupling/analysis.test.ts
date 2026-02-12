@@ -5,21 +5,23 @@ import { analyzeDependencies } from '../../../src/features/dependencies';
 import { createProgramFromMap } from '../shared/test-kit';
 
 describe('integration/coupling', () => {
-  it('should detect hotspots when dependency fan-in/out exists', () => {
+  it('should detect off-main-sequence when module is stable and concrete', () => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set('/virtual/coupling/a.ts', `import './b';\nexport const alpha = 1;`);
-    sources.set('/virtual/coupling/b.ts', `import './c';\nexport const beta = 2;`);
-    sources.set('/virtual/coupling/c.ts', `import './a';\nexport const gamma = 3;`);
+    sources.set('/virtual/coupling/a.ts', `import './shared';\nexport const alpha = 1;`);
+    sources.set('/virtual/coupling/b.ts', `import './shared';\nexport const beta = 2;`);
+    sources.set('/virtual/coupling/shared.ts', `export const shared = 3;`);
 
     // Act
     let program = createProgramFromMap(sources);
     let dependencies = analyzeDependencies(program);
     let coupling = analyzeCoupling(dependencies);
+    let hotspot = coupling.hotspots.find(entry => entry.module.includes('shared'));
 
     // Assert
-    expect(coupling.hotspots.length).toBeGreaterThan(0);
+    expect(hotspot).toBeDefined();
+    expect(hotspot?.signals.includes('off-main-sequence')).toBe(true);
   });
 
   it('should return empty hotspots when dependencies are empty', () => {
@@ -48,7 +50,7 @@ describe('integration/coupling', () => {
 
     // Assert
     expect(hotspot).toBeDefined();
-    expect(hotspot?.signals.includes('fan-in')).toBe(true);
+    expect(hotspot?.metrics.fanIn).toBeGreaterThanOrEqual(1);
   });
 
   it('should sort hotspots by score then module name when tied', () => {
@@ -74,3 +76,4 @@ describe('integration/coupling', () => {
     expect(names[0]).toBe(sortedNames[0]);
   });
 });
+

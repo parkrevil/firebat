@@ -15,6 +15,7 @@ interface AnalyzeLintInput {
   readonly fix: boolean;
   readonly configPath?: string;
   readonly cwd?: string;
+  readonly resolveMode?: 'default' | 'project-only';
   readonly logger?: FirebatLogger;
 }
 
@@ -25,6 +26,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
     ...(input.configPath !== undefined ? { configPath: input.configPath } : {}),
     ...(input.fix ? { fix: true } : {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    ...(input.resolveMode !== undefined ? { resolveMode: input.resolveMode } : {}),
     logger,
   });
 

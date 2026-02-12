@@ -3,10 +3,13 @@ import { describe, expect, it } from 'bun:test';
 import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../shared/test-kit';
 
-const createFunction = (functionName: string, localName: string, literal: number): string => {
-  return [`export function ${functionName}() {`, `  const ${localName} = ${literal};`, `  return ${localName} + 1;`, `}`].join(
-    '\n',
-  );
+const createArrowFunction = (exportName: string, literal: number): string => {
+  return [
+    `export const ${exportName} = () => {`,
+    `  const value = ${literal};`,
+    `  return value + 1;`,
+    `};`,
+  ].join('\n');
 };
 
 const createTypeAlias = (typeName: string, fieldName: string): string => {
@@ -38,14 +41,12 @@ describe('integration/exact-duplicates (fuzz)', () => {
     for (let iteration = 0; iteration < iterations; iteration += 1) {
       const sources = new Map<string, string>();
       const baseLiteral = prng.nextInt(10) + 1;
-      const base = createFunction(`alpha_${iteration}`, `value_${iteration}`, baseLiteral);
+      const base = createArrowFunction(`base_${iteration}`, baseLiteral);
       const duplicateCount = 2 + prng.nextInt(3);
 
       for (let copy = 0; copy < duplicateCount; copy += 1) {
         const filePath = `/virtual/fuzz/dup-${seed}-${iteration}-${copy}.ts`;
-        const localName = `local_${iteration}_${copy}`;
-        const fnName = `fn_${iteration}_${copy}`;
-        const fn = createFunction(fnName, localName, baseLiteral);
+        const fn = createArrowFunction(`fn_${iteration}_${copy}`, baseLiteral);
         const typeAlias = createTypeAlias(`T${iteration}_${copy}`, `field_${iteration}_${copy}`);
 
         // Ensure the file has at least one intentional duplicate plus some noise.
@@ -54,7 +55,7 @@ describe('integration/exact-duplicates (fuzz)', () => {
 
       // Add a near-duplicate: same shape but different literal.
       const mutantFile = `/virtual/fuzz/mutant-${seed}-${iteration}.ts`;
-      const mutant = createFunction(`mut_${iteration}`, `m_${iteration}`, baseLiteral + 1);
+      const mutant = createArrowFunction(`mut_${iteration}`, baseLiteral + 1);
 
       sources.set(mutantFile, [mutant].join('\n'));
 
@@ -82,8 +83,8 @@ describe('integration/exact-duplicates (fuzz)', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set('/virtual/fuzz/min-one.ts', createFunction('alpha', 'value', 1));
-    sources.set('/virtual/fuzz/min-two.ts', createFunction('beta', 'value', 1));
+    sources.set('/virtual/fuzz/min-one.ts', createArrowFunction('alpha', 1));
+    sources.set('/virtual/fuzz/min-two.ts', createArrowFunction('beta', 1));
 
     // Act
     const program = createProgramFromMap(sources);

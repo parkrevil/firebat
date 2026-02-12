@@ -17,7 +17,7 @@ describe('integration/exact-duplicates', () => {
     let sources = new Map<string, string>();
 
     sources.set('/virtual/dup-detector/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('beta', 1));
+    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('alpha', 1));
 
     // Act
     let program = createProgramFromMap(sources);
@@ -33,7 +33,7 @@ describe('integration/exact-duplicates', () => {
     let sources = new Map<string, string>();
 
     sources.set('/virtual/dup-detector/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('beta', 1));
+    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('alpha', 1));
 
     // Act
     let program = createProgramFromMap(sources);
@@ -48,7 +48,7 @@ describe('integration/exact-duplicates', () => {
     let sources = new Map<string, string>();
 
     sources.set('/virtual/dup-detector/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('beta', 2));
+    sources.set('/virtual/dup-detector/two.ts', createFunctionSource('alpha', 2));
 
     // Act
     let program = createProgramFromMap(sources);
@@ -63,12 +63,34 @@ describe('integration/exact-duplicates', () => {
     let sources = new Map<string, string>();
 
     sources.set('/virtual/dup-detector/one.ts', createClassSource('Alpha'));
-    sources.set('/virtual/dup-detector/two.ts', createClassSource('Beta'));
+    sources.set('/virtual/dup-detector/two.ts', createClassSource('Alpha'));
 
     // Act
     let program = createProgramFromMap(sources);
     let groups = detectExactDuplicates(program, 1);
     let hasClassGroup = groups.some(group => group.items.some(item => item.kind === 'type'));
+
+    // Assert
+    expect(hasClassGroup).toBe(true);
+  });
+
+  it('should detect duplicate class expressions when bodies are identical', () => {
+    // Arrange
+    const sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/dup-detector/one.ts',
+      ['export const A = class {', '  run() {', '    return 1;', '  }', '};'].join('\n'),
+    );
+    sources.set(
+      '/virtual/dup-detector/two.ts',
+      ['export const B = class {', '  run() {', '    return 1;', '  }', '};'].join('\n'),
+    );
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const groups = detectExactDuplicates(program, 1);
+    const hasClassGroup = groups.some(group => group.items.some(item => item.kind === 'type'));
 
     // Assert
     expect(hasClassGroup).toBe(true);
@@ -89,14 +111,8 @@ describe('integration/exact-duplicates', () => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/dup-detector/one.ts',
-      ['export function alpha() {', '  return format("a|b", "c");', '}'].join('\n'),
-    );
-    sources.set(
-      '/virtual/dup-detector/two.ts',
-      ['export function beta() {', '  return format("a", "b|c");', '}'].join('\n'),
-    );
+    sources.set('/virtual/dup-detector/one.ts', ['export function alpha() {', '  return format("a|b", "c");', '}'].join('\n'));
+    sources.set('/virtual/dup-detector/two.ts', ['export function alpha() {', '  return format("a", "b|c");', '}'].join('\n'));
 
     // Act
     let program = createProgramFromMap(sources);
@@ -110,14 +126,8 @@ describe('integration/exact-duplicates', () => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/dup-detector/one.ts',
-      ['export function alpha() {', '  return format("a\\0b", "c");', '}'].join('\n'),
-    );
-    sources.set(
-      '/virtual/dup-detector/two.ts',
-      ['export function beta() {', '  return format("a", "b\\0c");', '}'].join('\n'),
-    );
+    sources.set('/virtual/dup-detector/one.ts', ['export function alpha() {', '  return format("a\\0b", "c");', '}'].join('\n'));
+    sources.set('/virtual/dup-detector/two.ts', ['export function alpha() {', '  return format("a", "b\\0c");', '}'].join('\n'));
 
     // Act
     let program = createProgramFromMap(sources);

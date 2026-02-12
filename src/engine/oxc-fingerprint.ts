@@ -66,7 +66,17 @@ const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boo
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean): string => {
+interface OxcFingerprintOptions {
+  readonly includeLiteralValues: boolean;
+  readonly includeIdentifierNames: boolean;
+}
+
+const escapeFingerprintToken = (token: string): string => {
+  // We use '\x00' as a join separator, so ensure tokens cannot contain it.
+  return token.replace(/\x00/g, '\\0');
+};
+
+const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOptions): string => {
   const diffs: string[] = [];
 
   const visit = (n: NodeValue) => {
@@ -87,7 +97,7 @@ const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean
       diffs.push(n.type);
     }
 
-    pushLiteralValue(n, diffs, includeLiteralValues);
+    pushLiteralValue(n, diffs, options.includeLiteralValues);
 
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
@@ -126,7 +136,14 @@ const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean
       // Type-2 ignores variable names.
       // Let's ignore Identifier names for better detection but include value literals.
       if (key === 'name' && n.type === 'Identifier') {
-        diffs.push('$ID');
+        if (options.includeIdentifierNames) {
+          const nameValue = (n as unknown as { name?: unknown }).name;
+          const resolved = typeof nameValue === 'string' ? nameValue : '';
+
+          diffs.push(`id:${resolved}`);
+        } else {
+          diffs.push('$ID');
+        }
 
         continue;
       }
@@ -137,11 +154,16 @@ const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean
 
   visit(node);
 
-  const encoded = diffs.map(entry => `${entry.length}:${entry}`).join('');
+  const encoded = diffs.map(escapeFingerprintToken).join('\x00');
 
   return hashString(encoded);
 };
 
-export const createOxcFingerprint = (node: NodeValue): string => createOxcFingerprintCore(node, true);
+export const createOxcFingerprintExact = (node: NodeValue): string =>
+  createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: true });
 
-export const createOxcFingerprintShape = (node: NodeValue): string => createOxcFingerprintCore(node, false);
+export const createOxcFingerprint = (node: NodeValue): string =>
+  createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: false });
+
+export const createOxcFingerprintShape = (node: NodeValue): string =>
+  createOxcFingerprintCore(node, { includeLiteralValues: false, includeIdentifierNames: false });

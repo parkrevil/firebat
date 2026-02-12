@@ -3,12 +3,12 @@ import { describe, expect, it } from 'bun:test';
 import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../shared/test-kit';
 
-const createDuplicateFunction = (functionName: string, literal: number): string => {
-  return [`export function ${functionName}() {`, `  const value = ${literal};`, `  return value + 1;`, `}`].join('\n');
+const createDuplicateFunction = (exportName: string, literal: number): string => {
+  return [`export const ${exportName} = () => {`, `  const value = ${literal};`, `  return value + 1;`, `};`].join('\n');
 };
 
-const createNoiseFunction = (functionName: string, literal: number): string => {
-  return [`export function ${functionName}() {`, `  const noise = ${literal};`, `  return noise;`, `}`].join('\n');
+const createNoiseFunction = (exportName: string, literal: number): string => {
+  return [`export const ${exportName} = () => {`, `  const noise = ${literal};`, `  return noise;`, `};`].join('\n');
 };
 
 const hasDuplicateGroup = (signatures: readonly string[]): boolean => {

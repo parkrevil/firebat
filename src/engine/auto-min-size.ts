@@ -11,10 +11,12 @@ const isDuplicationTarget = (node: Node): boolean => {
   return (
     nodeType === 'FunctionDeclaration' ||
     nodeType === 'ClassDeclaration' ||
+    nodeType === 'ClassExpression' ||
     nodeType === 'MethodDefinition' ||
     nodeType === 'FunctionExpression' ||
     nodeType === 'ArrowFunctionExpression' ||
-    nodeType === 'BlockStatement'
+    nodeType === 'TSTypeAliasDeclaration' ||
+    nodeType === 'TSInterfaceDeclaration'
   );
 };
 
